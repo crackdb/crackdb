@@ -1,19 +1,27 @@
+pub mod executors;
+pub mod plan;
 pub mod tables;
+
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 
-use crate::tables::{InMemTable, Row};
+use crate::{
+    plan::{BooleanExpr, Expression, LogicalPlan},
+    tables::{InMemTable, Row},
+};
 
+use executors::{Filter, InMemTableScan, PhysicalPlan};
+use plan::Literal;
 use sqlparser::{
-    ast::{Expr, SetExpr, Statement, Value, Values},
+    ast::{BinaryOperator, Expr, SetExpr, Statement, TableFactor, Value, Values},
     dialect::GenericDialect,
     parser::{Parser, ParserError},
 };
 
 pub struct CrackDB {
-    tables: Arc<RwLock<HashMap<String, InMemTable>>>,
+    tables: Arc<RwLock<HashMap<String, Arc<RwLock<InMemTable>>>>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -22,6 +30,8 @@ pub enum DBError {
     TableNotFound(String),
     Unknown(String),
 }
+
+pub type DBResult<T> = Result<T, DBError>;
 
 impl From<ParserError> for DBError {
     fn from(e: ParserError) -> Self {
@@ -44,7 +54,10 @@ impl ResultSet {
         }
     }
     pub fn new(headers: Vec<String>, rows: Vec<Vec<i32>>) -> Self {
-        ResultSet { headers, rows }
+        ResultSet {
+            headers,
+            rows: rows,
+        }
     }
 }
 
@@ -106,7 +119,7 @@ impl CrackDB {
                 self.process_insert(table_name, columns, *source)?;
                 Ok(ResultSet::empty())
             }
-            Statement::Query(..) => panic!("query not implemented yet!"),
+            Statement::Query(query) => self.process_query(*query),
             _ => return Err(DBError::Unknown("statement not supported.".to_string())),
         }
     }
@@ -127,7 +140,10 @@ impl CrackDB {
         let mut tables_map = RwLock::write(Arc::as_ref(&self.tables)).map_err(|_| {
             DBError::Unknown("Access write lock of DB tables failed!".to_string())
         })?;
-        tables_map.insert(name.to_string(), InMemTable::new(name.to_string(), columns));
+        tables_map.insert(
+            name.to_string(),
+            Arc::new(RwLock::new(InMemTable::new(name.to_string(), columns))),
+        );
         Ok(())
     }
 
@@ -164,18 +180,114 @@ impl CrackDB {
             _ => panic!("unsupported insert statement type!"),
         };
 
-        let tables_map = RwLock::read(Arc::as_ref(&self.tables)).map_err(|_| {
-            DBError::Unknown("Access read lock of DB tables failed!".to_string())
-        })?;
-        match tables_map.get(table_name.to_string().as_str()) {
+        match self.try_get_table(table_name.to_string().as_str())? {
             Some(table) => {
-                let mut rows = RwLock::write(table.data()).map_err(|_| {
+                let mut table = RwLock::write(Arc::as_ref(&table)).map_err(|_| {
                     DBError::Unknown("Access write lock of table failed!".to_string())
                 })?;
-                rows.extend(rows_to_insert);
+                table.insert_data(rows_to_insert);
                 Ok(())
             }
             None => Err(DBError::TableNotFound(table_name.to_string())),
         }
+    }
+
+    fn process_query(&self, query: sqlparser::ast::Query) -> Result<ResultSet, DBError> {
+        // generate logical plan
+        let logical_plan = build_logical_plan(query)?;
+        print!("logical plan: {:?}", logical_plan);
+
+        // TODO: optimize logical plan before further planning
+
+        // transform to physical plan by planning it
+        let mut pysical_plan = self.planning(logical_plan)?;
+
+        // execute query
+        pysical_plan.setup()?;
+        let mut rs = ResultSet::new(pysical_plan.headers()?, Vec::new());
+        while let Some(r) = pysical_plan.next()? {
+            rs.rows.push(r.fields);
+        }
+
+        Ok(rs)
+    }
+
+    fn planning(&self, logical_plan: LogicalPlan) -> DBResult<Box<dyn PhysicalPlan>> {
+        match logical_plan {
+            LogicalPlan::Filter { expression, child } => {
+                let child_plan = self.planning(*child)?;
+                Ok(Box::new(Filter::new(expression, child_plan)))
+            }
+            LogicalPlan::Scan { table } => match self.try_get_table(&table)? {
+                Some(table) => Ok(Box::new(InMemTableScan::new(table))),
+                None => Err(DBError::TableNotFound(table)),
+            },
+        }
+    }
+
+    fn try_get_table(
+        &self,
+        table_name: &str,
+    ) -> Result<Option<Arc<RwLock<InMemTable>>>, DBError> {
+        self.tables
+            .read()
+            .map_err(|_| {
+                DBError::Unknown("Acceess read lock of tables failed!".to_string())
+            })
+            .map(|tables| tables.get(table_name).map(|t| t.clone()))
+    }
+}
+
+fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
+    let logical_plan = match *query.body {
+        SetExpr::Select(box_select) => {
+            let select = *box_select;
+            let table_with_join = select.from.iter().next().unwrap();
+            let scan = match &table_with_join.relation {
+                TableFactor::Table {
+                    name,
+                    alias: _,
+                    args: _,
+                    with_hints: _,
+                } => LogicalPlan::Scan {
+                    table: name.to_string(),
+                },
+                _ => todo!(),
+            };
+            if let Some(selection) = &select.selection {
+                let filter_expr = ast_expr_to_plan_expr(selection);
+                LogicalPlan::Filter {
+                    expression: filter_expr,
+                    child: Box::new(scan),
+                }
+            } else {
+                scan
+            }
+        }
+        _ => {
+            return Err(DBError::Unknown(
+                "Query statement not supported!".to_string(),
+            ));
+        }
+    };
+    Ok(logical_plan)
+}
+
+fn ast_expr_to_plan_expr(expr: &Expr) -> Expression {
+    match expr {
+        Expr::BinaryOp { left, op, right } => match op {
+            BinaryOperator::Gt => Expression::BooleanExpr(Box::new(BooleanExpr::GT {
+                left: ast_expr_to_plan_expr(&left),
+                right: ast_expr_to_plan_expr(&right),
+            })),
+            _ => panic!("not supported yet!"),
+        },
+        Expr::Identifier(identifier) => {
+            Expression::FieldRef(identifier.value.to_string())
+        }
+        Expr::Value(Value::Number(value, _)) => {
+            Expression::Literal(Literal::Int(value.parse::<i64>().unwrap()))
+        }
+        _ => panic!("not supported yet!"),
     }
 }

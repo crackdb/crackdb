@@ -1,15 +1,14 @@
-use std::sync::{Arc, RwLock};
-
 use sqlparser::ast::ColumnDef;
 
 pub struct InMemTable {
     name: String,
     columns: Vec<ColumnDef>,
-    data: Arc<RwLock<Vec<Row>>>,
+    data: Vec<Row>,
 }
 
+#[derive(Debug, Clone)]
 pub struct Row {
-    fields: Vec<i32>,
+    pub fields: Vec<i32>,
 }
 
 impl Row {
@@ -23,11 +22,20 @@ impl InMemTable {
         InMemTable {
             name,
             columns,
-            data: Arc::new(RwLock::new(Vec::new())),
+            data: Vec::new(),
         }
     }
 
-    pub fn data(&self) -> &RwLock<Vec<Row>> {
-        Arc::as_ref(&self.data)
+    pub fn insert_data(&mut self, data: Vec<Row>) {
+        self.data.extend(data)
+    }
+
+    // FIXME: avoid copy data for reading purpose
+    pub fn read(&self) -> Vec<Row> {
+        self.data.iter().map(|r| r.clone()).collect()
+    }
+
+    pub fn headers(&self) -> Vec<String> {
+        self.columns.iter().map(|f| f.name.to_string()).collect()
     }
 }
