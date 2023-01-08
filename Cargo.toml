@@ -12,3 +12,4 @@ name = "crackdb"
 name = "crackdb"
 
 [dependencies]
+sqlparser = { version = "0.30.0", features = ["serde", "visitor"]}
