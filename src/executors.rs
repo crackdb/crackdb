@@ -21,7 +21,7 @@ pub struct InMemTableScan {
 impl InMemTableScan {
     pub fn new(table: Arc<RwLock<InMemTable>>) -> Self {
         Self {
-            table: table,
+            table,
             snapshot: None,
             next: 0,
         }

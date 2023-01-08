@@ -20,6 +20,7 @@ use sqlparser::{
     parser::{Parser, ParserError},
 };
 
+#[derive(Default)]
 pub struct CrackDB {
     tables: Arc<RwLock<HashMap<String, Arc<RwLock<InMemTable>>>>>,
 }
@@ -54,10 +55,7 @@ impl ResultSet {
         }
     }
     pub fn new(headers: Vec<String>, rows: Vec<Vec<i32>>) -> Self {
-        ResultSet {
-            headers,
-            rows: rows,
-        }
+        ResultSet { headers, rows }
     }
 }
 
@@ -71,7 +69,8 @@ impl CrackDB {
             ));
         }
         let statement = Iterator::next(&mut statements.into_iter()).unwrap();
-        println!("AST: {:?}", statement);
+        // TODO: log the AST in debug level
+        // println!("AST: {:?}", statement);
         // TODO: warn any present but unused nodes in AST
         // TODO: check and validate AST
         match statement {
@@ -120,7 +119,7 @@ impl CrackDB {
                 Ok(ResultSet::empty())
             }
             Statement::Query(query) => self.process_query(*query),
-            _ => return Err(DBError::Unknown("statement not supported.".to_string())),
+            _ => Err(DBError::Unknown("statement not supported.".to_string())),
         }
     }
 
@@ -142,7 +141,7 @@ impl CrackDB {
         })?;
         tables_map.insert(
             name.to_string(),
-            Arc::new(RwLock::new(InMemTable::new(name.to_string(), columns))),
+            Arc::new(RwLock::new(InMemTable::new(columns))),
         );
         Ok(())
     }
@@ -195,7 +194,7 @@ impl CrackDB {
     fn process_query(&self, query: sqlparser::ast::Query) -> Result<ResultSet, DBError> {
         // generate logical plan
         let logical_plan = build_logical_plan(query)?;
-        print!("logical plan: {:?}", logical_plan);
+        // print!("logical plan: {:?}", logical_plan);
 
         // TODO: optimize logical plan before further planning
 
@@ -234,7 +233,7 @@ impl CrackDB {
             .map_err(|_| {
                 DBError::Unknown("Acceess read lock of tables failed!".to_string())
             })
-            .map(|tables| tables.get(table_name).map(|t| t.clone()))
+            .map(|tables| tables.get(table_name).cloned())
     }
 }
 
@@ -242,7 +241,8 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
     let logical_plan = match *query.body {
         SetExpr::Select(box_select) => {
             let select = *box_select;
-            let table_with_join = select.from.iter().next().unwrap();
+            // FIXME: support select from multiple tables
+            let table_with_join = select.from.first().unwrap();
             let scan = match &table_with_join.relation {
                 TableFactor::Table {
                     name,
@@ -275,13 +275,14 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
 
 fn ast_expr_to_plan_expr(expr: &Expr) -> Expression {
     match expr {
-        Expr::BinaryOp { left, op, right } => match op {
-            BinaryOperator::Gt => Expression::BooleanExpr(Box::new(BooleanExpr::GT {
-                left: ast_expr_to_plan_expr(&left),
-                right: ast_expr_to_plan_expr(&right),
-            })),
-            _ => panic!("not supported yet!"),
-        },
+        Expr::BinaryOp {
+            left,
+            op: BinaryOperator::Gt,
+            right,
+        } => Expression::BooleanExpr(Box::new(BooleanExpr::GT {
+            left: ast_expr_to_plan_expr(left),
+            right: ast_expr_to_plan_expr(right),
+        })),
         Expr::Identifier(identifier) => {
             Expression::FieldRef(identifier.value.to_string())
         }

@@ -1,7 +1,6 @@
 use sqlparser::ast::ColumnDef;
 
 pub struct InMemTable {
-    name: String,
     columns: Vec<ColumnDef>,
     data: Vec<Row>,
 }
@@ -18,9 +17,8 @@ impl Row {
 }
 
 impl InMemTable {
-    pub fn new(name: String, columns: Vec<ColumnDef>) -> Self {
+    pub fn new(columns: Vec<ColumnDef>) -> Self {
         InMemTable {
-            name,
             columns,
             data: Vec::new(),
         }
@@ -32,7 +30,7 @@ impl InMemTable {
 
     // FIXME: avoid copy data for reading purpose
     pub fn read(&self) -> Vec<Row> {
-        self.data.iter().map(|r| r.clone()).collect()
+        self.data.to_vec()
     }
 
     pub fn headers(&self) -> Vec<String> {
