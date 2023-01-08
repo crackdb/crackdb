@@ -1,6 +1,8 @@
-pub mod executors;
-pub mod plan;
+mod errors;
+pub mod logical_plans;
+pub mod pysical_plans;
 pub mod tables;
+pub use errors::*;
 
 use std::{
     collections::HashMap,
@@ -8,12 +10,12 @@ use std::{
 };
 
 use crate::{
-    plan::{BooleanExpr, Expression, LogicalPlan},
+    logical_plans::{BooleanExpr, Expression, LogicalPlan},
     tables::{InMemTable, Row},
 };
 
-use executors::{Filter, InMemTableScan, PhysicalPlan};
-use plan::Literal;
+use logical_plans::Literal;
+use pysical_plans::{Filter, InMemTableScan, PhysicalPlan};
 use sqlparser::{
     ast::{BinaryOperator, Expr, SetExpr, Statement, TableFactor, Value, Values},
     dialect::GenericDialect,
@@ -23,21 +25,6 @@ use sqlparser::{
 #[derive(Default)]
 pub struct CrackDB {
     tables: Arc<RwLock<HashMap<String, Arc<RwLock<InMemTable>>>>>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum DBError {
-    ParserError(String),
-    TableNotFound(String),
-    Unknown(String),
-}
-
-pub type DBResult<T> = Result<T, DBError>;
-
-impl From<ParserError> for DBError {
-    fn from(e: ParserError) -> Self {
-        DBError::ParserError(e.to_string())
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

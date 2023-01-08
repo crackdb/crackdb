@@ -1,9 +1,10 @@
 use std::sync::{Arc, RwLock};
 
 use crate::{
-    plan::Expression,
+    errors::DBError,
+    errors::DBResult,
+    logical_plans::Expression,
     tables::{InMemTable, Row},
-    DBError, DBResult,
 };
 
 pub trait PhysicalPlan {
