@@ -18,7 +18,7 @@ fn create_insert_and_query() {
         vec![vec![1, 30, 101]],
     );
     assert_eq!(
-        db.execute("select * from orders where id > 1"),
+        db.execute("select * from orders where id > 0"),
         Ok(expected_results)
     );
 }

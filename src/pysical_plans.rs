@@ -3,14 +3,17 @@ use std::sync::{Arc, RwLock};
 use crate::{
     errors::DBError,
     errors::DBResult,
-    logical_plans::Expression,
+    expressions::Expression,
     tables::{InMemTable, Row},
 };
 
 pub trait PhysicalPlan {
+    /// Setup this plan node, e.g. prepare some resources etc.
     fn setup(&mut self) -> DBResult<()>;
+    /// Acting like an iterator to get the next now if present
     fn next(&mut self) -> DBResult<Option<Row>>;
-    fn headers(&self) -> DBResult<Vec<String>>;
+    /// Return the schema/shape of the output rows.
+    fn schema(&self) -> DBResult<Vec<String>>;
 }
 
 pub struct InMemTableScan {
@@ -49,7 +52,7 @@ impl PhysicalPlan for InMemTableScan {
         Ok(next)
     }
 
-    fn headers(&self) -> DBResult<Vec<String>> {
+    fn schema(&self) -> DBResult<Vec<String>> {
         let table = self.table.as_ref().read().map_err(|_e| {
             DBError::Unknown("Access read lock of table failed!".to_string())
         })?;
@@ -75,14 +78,14 @@ impl PhysicalPlan for Filter {
 
     fn next(&mut self) -> DBResult<Option<Row>> {
         while let Some(row) = self.child.next()? {
-            if self.expression.eval(&row) {
+            if self.expression.eval(&row)?.as_bool()? {
                 return Ok(Some(row));
             }
         }
         Ok(None)
     }
 
-    fn headers(&self) -> DBResult<Vec<String>> {
-        self.child.headers()
+    fn schema(&self) -> DBResult<Vec<String>> {
+        self.child.schema()
     }
 }

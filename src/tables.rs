@@ -1,5 +1,7 @@
 use sqlparser::ast::ColumnDef;
 
+use crate::{expressions::Literal, DBError, DBResult};
+
 pub struct InMemTable {
     columns: Vec<ColumnDef>,
     data: Vec<Row>,
@@ -13,6 +15,16 @@ pub struct Row {
 impl Row {
     pub fn new(fields: Vec<i32>) -> Self {
         Row { fields }
+    }
+
+    pub fn get_field(&self, index: usize) -> DBResult<Literal> {
+        match self.fields.get(index) {
+            Some(val) => Ok(Literal::Int(*val)),
+            None if index >= self.fields.len() => {
+                Err(DBError::Unknown("Index out of bound.".to_string()))
+            }
+            None => Err(DBError::Unknown("Value not exists.".to_string())),
+        }
     }
 }
 

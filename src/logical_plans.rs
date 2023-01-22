@@ -1,35 +1,31 @@
-use crate::tables::Row;
+use crate::expressions::Expression;
+use crate::{DBError, DBResult};
 
 #[derive(Debug)]
 pub enum LogicalPlan {
     Scan {
         table: String,
     },
+    ResolvedScan {
+        table: String,
+        columns: Vec<String>,
+    },
     Filter {
         expression: Expression,
         child: Box<LogicalPlan>,
     },
 }
-
-#[derive(Debug)]
-pub enum Expression {
-    Literal(Literal),
-    FieldRef(String),
-    BooleanExpr(Box<BooleanExpr>),
-}
-impl Expression {
-    pub fn eval(&self, _row: &Row) -> bool {
-        // TODO: implement this
-        true
+impl LogicalPlan {
+    pub fn schema(&self) -> DBResult<Vec<String>> {
+        match self {
+            LogicalPlan::Scan { table: _ } => {
+                Err(DBError::Unknown("Scan is not resolved.".to_string()))
+            }
+            LogicalPlan::ResolvedScan { table: _, columns } => Ok(columns.clone()),
+            LogicalPlan::Filter {
+                expression: _,
+                child,
+            } => child.schema(),
+        }
     }
-}
-
-#[derive(Debug)]
-pub enum BooleanExpr {
-    GT { left: Expression, right: Expression },
-}
-
-#[derive(Debug)]
-pub enum Literal {
-    Int(i64),
 }
