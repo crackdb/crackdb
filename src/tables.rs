@@ -1,37 +1,15 @@
-use sqlparser::ast::ColumnDef;
-
-use crate::{expressions::Literal, DBError, DBResult};
+use crate::data_types::DataType;
+use crate::row::Row;
 
 pub struct InMemTable {
-    columns: Vec<ColumnDef>,
+    meta: TableMeta,
     data: Vec<Row>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Row {
-    pub fields: Vec<i32>,
-}
-
-impl Row {
-    pub fn new(fields: Vec<i32>) -> Self {
-        Row { fields }
-    }
-
-    pub fn get_field(&self, index: usize) -> DBResult<Literal> {
-        match self.fields.get(index) {
-            Some(val) => Ok(Literal::Int(*val)),
-            None if index >= self.fields.len() => {
-                Err(DBError::Unknown("Index out of bound.".to_string()))
-            }
-            None => Err(DBError::Unknown("Value not exists.".to_string())),
-        }
-    }
-}
-
 impl InMemTable {
-    pub fn new(columns: Vec<ColumnDef>) -> Self {
+    pub fn new(meta: TableMeta) -> Self {
         InMemTable {
-            columns,
+            meta,
             data: Vec::new(),
         }
     }
@@ -46,6 +24,64 @@ impl InMemTable {
     }
 
     pub fn headers(&self) -> Vec<String> {
-        self.columns.iter().map(|f| f.name.to_string()).collect()
+        self.meta
+            .schema
+            .fields
+            .iter()
+            .map(|f| f.name.to_string())
+            .collect()
+    }
+
+    pub fn get_table_meta(&self) -> TableMeta {
+        self.meta.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TableMeta {
+    schema: RelationSchema,
+}
+
+impl TableMeta {
+    pub fn new(schema: RelationSchema) -> Self {
+        TableMeta { schema }
+    }
+
+    pub fn get_schema(&self) -> &RelationSchema {
+        &self.schema
+    }
+}
+#[derive(Debug, Clone)]
+pub struct RelationSchema {
+    fields: Vec<FieldInfo>,
+}
+
+impl RelationSchema {
+    pub fn new(fields: Vec<FieldInfo>) -> Self {
+        RelationSchema { fields }
+    }
+
+    pub fn get_fields(&self) -> &Vec<FieldInfo> {
+        &self.fields
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldInfo {
+    name: String,
+    data_type: DataType,
+}
+
+impl FieldInfo {
+    pub fn new(name: String, data_type: DataType) -> Self {
+        Self { name, data_type }
+    }
+
+    pub fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
     }
 }

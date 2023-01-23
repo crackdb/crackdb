@@ -1,14 +1,15 @@
 use crate::expressions::Expression;
+use crate::tables::RelationSchema;
 use crate::{DBError, DBResult};
 
 #[derive(Debug)]
 pub enum LogicalPlan {
-    Scan {
+    UnResolvedScan {
         table: String,
     },
-    ResolvedScan {
+    Scan {
         table: String,
-        columns: Vec<String>,
+        schema: RelationSchema,
     },
     Filter {
         expression: Expression,
@@ -16,12 +17,12 @@ pub enum LogicalPlan {
     },
 }
 impl LogicalPlan {
-    pub fn schema(&self) -> DBResult<Vec<String>> {
+    pub fn schema(&self) -> DBResult<RelationSchema> {
         match self {
-            LogicalPlan::Scan { table: _ } => {
+            LogicalPlan::UnResolvedScan { table: _ } => {
                 Err(DBError::Unknown("Scan is not resolved.".to_string()))
             }
-            LogicalPlan::ResolvedScan { table: _, columns } => Ok(columns.clone()),
+            LogicalPlan::Scan { table: _, schema } => Ok(schema.clone()),
             LogicalPlan::Filter {
                 expression: _,
                 child,

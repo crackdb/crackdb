@@ -1,6 +1,9 @@
 use std::vec;
 
-use crackdb::{CrackDB, ResultSet};
+use crackdb::{
+    row::{Cell, Row},
+    CrackDB, ResultSet,
+};
 
 #[test]
 fn create_insert_and_query() {
@@ -15,10 +18,45 @@ fn create_insert_and_query() {
     );
     let expected_results = ResultSet::new(
         vec!["id".to_owned(), "amount".to_owned(), "userId".to_owned()],
-        vec![vec![1, 30, 101]],
+        vec![Row::new(vec![
+            Cell::Int32(1),
+            Cell::Int32(30),
+            Cell::Int32(101),
+        ])],
     );
     assert_eq!(
         db.execute("select * from orders where id > 0"),
+        Ok(expected_results)
+    );
+}
+
+#[test]
+fn create_insert_and_query_with_more_data_types_and_expressions() {
+    let db = CrackDB::new();
+    assert_eq!(
+        db.execute("create table orders (id int, amount double, userId String, dateTime DateTime)"),
+        Ok(ResultSet::empty())
+    );
+    assert_eq!(
+        db.execute("insert into orders values (1, 30.0, '101', '2023-01-22 15:04:00')"),
+        Ok(ResultSet::empty())
+    );
+    let expected_results = ResultSet::new(
+        vec![
+            "id".to_owned(),
+            "amount".to_owned(),
+            "userId".to_owned(),
+            "dateTime".to_owned(),
+        ],
+        vec![Row::new(vec![
+            Cell::Int32(1),
+            Cell::Float64(30.0),
+            Cell::String("101".to_string()),
+            Cell::DateTime("2023-01-22 15:04:00".to_string()),
+        ])],
+    );
+    assert_eq!(
+        db.execute("select * from orders where id = 1"),
         Ok(expected_results)
     );
 }
