@@ -4,11 +4,13 @@ pub mod logical_plans;
 pub mod pysical_plans;
 pub mod tables;
 pub use errors::*;
+use optimizer::Optimizer;
 use tables::{FieldInfo, RelationSchema, TableMeta};
 pub mod data_types;
 pub mod row;
 use data_types::DataType;
 use row::Cell;
+mod optimizer;
 
 use std::{
     collections::HashMap,
@@ -27,6 +29,11 @@ use sqlparser::{
 
 #[derive(Default)]
 pub struct CrackDB {
+    catalog: Arc<RwLock<Catalog>>,
+}
+
+#[derive(Default)]
+pub struct Catalog {
     tables: Arc<RwLock<HashMap<String, Arc<RwLock<InMemTable>>>>>,
 }
 
@@ -113,9 +120,10 @@ impl CrackDB {
     }
 
     pub fn new() -> Self {
-        CrackDB {
+        let catalog = Arc::new(RwLock::new(Catalog {
             tables: Arc::new(RwLock::new(HashMap::new())),
-        }
+        }));
+        CrackDB { catalog }
     }
 
     /// create a table in CrackDB
@@ -132,14 +140,11 @@ impl CrackDB {
             .collect();
         let schema = RelationSchema::new(fields);
         let meta = TableMeta::new(schema);
-        let mut tables_map = RwLock::write(Arc::as_ref(&self.tables)).map_err(|_| {
-            DBError::Unknown("Access write lock of DB tables failed!".to_string())
-        })?;
-        tables_map.insert(
-            name.to_string(),
-            Arc::new(RwLock::new(InMemTable::new(meta))),
-        );
-        Ok(())
+        RwLock::read(&self.catalog)
+            .map_err(|_e| {
+                DBError::Unknown("access catalog read lock failed.".to_string())
+            })?
+            .create_table(name.to_string(), meta)
     }
 
     fn process_insert(
@@ -154,7 +159,11 @@ impl CrackDB {
         );
 
         let schema = {
-            let table = self.try_get_table(table_name.to_string().as_str())?;
+            let table = RwLock::read(&self.catalog)
+                .map_err(|_e| {
+                    DBError::Unknown("access catalog read lock failed".to_string())
+                })?
+                .try_get_table(table_name.to_string().as_str())?;
             let table = RwLock::read(&table).map_err(|_| {
                 DBError::Unknown("Access read lock of table failed.".to_string())
             })?;
@@ -197,7 +206,11 @@ impl CrackDB {
             _ => panic!("unsupported insert statement type!"),
         };
 
-        let table = self.try_get_table(table_name.to_string().as_str())?;
+        let table = RwLock::read(&self.catalog)
+            .map_err(|_e| {
+                DBError::Unknown("access catalog read lock failed.".to_string())
+            })?
+            .try_get_table(table_name.to_string().as_str())?;
         let mut table = RwLock::write(Arc::as_ref(&table)).map_err(|_| {
             DBError::Unknown("Access write lock of table failed!".to_string())
         })?;
@@ -211,10 +224,11 @@ impl CrackDB {
         // print!("logical plan: {:?}", logical_plan);
 
         // TODO: optimize logical plan before further planning
-        let resolved_logical_plan = self.resolve_logical_plan(logical_plan)?;
+        let optimizer = Optimizer::new(Arc::clone(&self.catalog));
+        let optimized_logical_plan = optimizer.optimize(logical_plan)?;
 
         // transform to physical plan by planning it
-        let mut pysical_plan = self.planning(resolved_logical_plan)?;
+        let mut pysical_plan = self.planning(optimized_logical_plan)?;
 
         // execute query
         pysical_plan.setup()?;
@@ -232,16 +246,23 @@ impl CrackDB {
                 let child_plan = self.planning(*child)?;
                 Ok(Box::new(Filter::new(expression, child_plan)))
             }
-            LogicalPlan::Scan { table, .. } => self.try_get_table(&table).map(|table| {
-                Box::new(InMemTableScan::new(table)) as Box<dyn PhysicalPlan>
-            }),
+            LogicalPlan::Scan { table, .. } => RwLock::read(&self.catalog)
+                .map_err(|_e| {
+                    DBError::Unknown("access catalog read lock failed".to_string())
+                })?
+                .try_get_table(&table)
+                .map(|table| {
+                    Box::new(InMemTableScan::new(table)) as Box<dyn PhysicalPlan>
+                }),
             LogicalPlan::UnResolvedScan { table: _ } => {
                 Err(DBError::Unknown("Scan is not resolved.".to_string()))
             }
         }
     }
+}
 
-    fn try_get_table(&self, table_name: &str) -> DBResult<Arc<RwLock<InMemTable>>> {
+impl Catalog {
+    pub fn try_get_table(&self, table_name: &str) -> DBResult<Arc<RwLock<InMemTable>>> {
         self.tables
             .read()
             .map_err(|_| {
@@ -255,108 +276,12 @@ impl CrackDB {
             })
     }
 
-    fn resolve_logical_plan(&self, logical_plan: LogicalPlan) -> DBResult<LogicalPlan> {
-        match logical_plan {
-            LogicalPlan::UnResolvedScan { table } => {
-                self.try_get_table(table.as_str()).and_then(|tbl| {
-                    RwLock::read(&tbl)
-                        .map_err(|_e| {
-                            DBError::Unknown("Access tabl read lock failed.".to_string())
-                        })
-                        .map(|tbl| LogicalPlan::Scan {
-                            table,
-                            schema: tbl.get_table_meta().get_schema().clone(),
-                        })
-                })
-            }
-            LogicalPlan::Filter { expression, child } => self
-                .resolve_logical_plan(*child)
-                .and_then(|resolved_child| {
-                    self.resolve_expression(expression, resolved_child.schema()?)
-                        .map(|resolved_expr| (resolved_expr, resolved_child))
-                })
-                .map(|(resolved_expr, resolved_child)| LogicalPlan::Filter {
-                    expression: resolved_expr,
-                    child: Box::new(resolved_child),
-                }),
-            LogicalPlan::Scan { .. } => Ok(logical_plan),
-        }
-    }
-
-    fn resolve_expression(
-        &self,
-        expr: Expression,
-        schema: RelationSchema,
-    ) -> DBResult<Expression> {
-        match expr {
-            Expression::Literal(Literal::UnResolvedNumber(s)) => Ok(s
-                .parse::<i32>()
-                .map(|v| Expression::Literal(Literal::Int(v)))?),
-            Expression::Literal(Literal::UnResolvedString(s)) => {
-                Ok(Expression::Literal(Literal::String(s)))
-            }
-            Expression::Literal(_) => Ok(expr),
-            Expression::UnResolvedFieldRef(name) => {
-                match schema.get_fields().iter().position(|f| f.name().eq(&name)) {
-                    Some(idx) => Ok(Expression::FieldRef(
-                        idx,
-                        schema.get_fields().get(idx).unwrap().data_type().clone(),
-                    )),
-                    None => Err(DBError::Unknown(format!("Cannot find field {}", name))),
-                }
-            }
-            Expression::FieldRef(_, _) => Ok(expr),
-            Expression::BooleanExpr(boolean_expr) => self
-                .resolve_boolean_expression(*boolean_expr, schema)
-                .map(|resolved_expr| Expression::BooleanExpr(Box::new(resolved_expr))),
-        }
-    }
-
-    fn resolve_boolean_expression(
-        &self,
-        expr: BooleanExpr,
-        schema: RelationSchema,
-    ) -> DBResult<BooleanExpr> {
-        match expr {
-            BooleanExpr::GT { left, right } => {
-                self.resolve_boolean_expr_helper(schema, left, right, |left, right| {
-                    BooleanExpr::GT { left, right }
-                })
-            }
-            BooleanExpr::GTE { left, right } => {
-                self.resolve_boolean_expr_helper(schema, left, right, |left, right| {
-                    BooleanExpr::GTE { left, right }
-                })
-            }
-            BooleanExpr::EQ { left, right } => {
-                self.resolve_boolean_expr_helper(schema, left, right, |left, right| {
-                    BooleanExpr::EQ { left, right }
-                })
-            }
-            BooleanExpr::LT { left, right } => {
-                self.resolve_boolean_expr_helper(schema, left, right, |left, right| {
-                    BooleanExpr::LT { left, right }
-                })
-            }
-            BooleanExpr::LTE { left, right } => {
-                self.resolve_boolean_expr_helper(schema, left, right, |left, right| {
-                    BooleanExpr::LTE { left, right }
-                })
-            }
-        }
-    }
-    fn resolve_boolean_expr_helper(
-        &self,
-        schema: RelationSchema,
-        left: Expression,
-        right: Expression,
-        builder: fn(Expression, Expression) -> BooleanExpr,
-    ) -> DBResult<BooleanExpr> {
-        self.resolve_expression(left, schema.clone())
-            .and_then(|resolved_left| {
-                self.resolve_expression(right, schema)
-                    .map(|resolved_right| builder(resolved_left, resolved_right))
-            })
+    pub fn create_table(&self, name: String, meta: TableMeta) -> Result<(), DBError> {
+        let mut tables_map = RwLock::write(Arc::as_ref(&self.tables)).map_err(|_| {
+            DBError::Unknown("Access write lock of DB tables failed!".to_string())
+        })?;
+        tables_map.insert(name, Arc::new(RwLock::new(InMemTable::new(meta))));
+        Ok(())
     }
 }
 

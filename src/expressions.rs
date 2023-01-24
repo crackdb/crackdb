@@ -1,4 +1,5 @@
 use crate::data_types::DataType;
+use crate::optimizer::{OptimizerContextForExpr, OptimizerNode};
 use crate::DBError;
 use crate::{row::Row, DBResult};
 
@@ -8,6 +9,10 @@ pub enum Expression {
     UnResolvedFieldRef(String),
     FieldRef(usize, DataType),
     BooleanExpr(Box<BooleanExpr>),
+}
+
+impl OptimizerNode for Expression {
+    type Context = OptimizerContextForExpr;
 }
 
 impl Expression {
