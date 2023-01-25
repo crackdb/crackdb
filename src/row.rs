@@ -24,20 +24,20 @@ impl Row {
 
 fn convert_cell_to_expr_literal(cell: &Cell) -> Literal {
     match cell {
-        Cell::UInt8(_v) => todo!(),
-        Cell::UInt16(_v) => todo!(),
-        Cell::UInt32(_v) => todo!(),
-        Cell::UInt64(_v) => todo!(),
-        Cell::Int8(_v) => todo!(),
-        Cell::Int16(_v) => todo!(),
-        Cell::Int32(v) => Literal::Int(*v),
-        Cell::Int64(_v) => todo!(),
-        Cell::Float32(_v) => todo!(),
-        Cell::Float64(_v) => todo!(),
-        Cell::String(_v) => todo!(),
-        Cell::Boolean(_v) => todo!(),
-        Cell::Null => todo!(),
-        Cell::DateTime(_v) => todo!(),
+        Cell::UInt8(v) => Literal::UInt8(*v),
+        Cell::UInt16(v) => Literal::UInt16(*v),
+        Cell::UInt32(v) => Literal::UInt32(*v),
+        Cell::UInt64(v) => Literal::UInt64(*v),
+        Cell::Int8(v) => Literal::Int8(*v),
+        Cell::Int16(v) => Literal::Int16(*v),
+        Cell::Int32(v) => Literal::Int32(*v),
+        Cell::Int64(v) => Literal::Int64(*v),
+        Cell::Float32(v) => Literal::Float32(*v),
+        Cell::Float64(v) => Literal::Float64(*v),
+        Cell::String(v) => Literal::String(v.to_string()),
+        Cell::Boolean(v) => Literal::Bool(*v),
+        Cell::Null => Literal::Null,
+        Cell::DateTime(v) => Literal::DateTime(v.to_string()),
     }
 }
 

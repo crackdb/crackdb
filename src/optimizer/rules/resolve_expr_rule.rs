@@ -1,5 +1,5 @@
 use crate::{
-    expressions::{BooleanExpr, Expression, Literal},
+    expressions::{BooleanExpr, Expression},
     logical_plans::LogicalPlan,
     optimizer::{OptimizerContext, OptimizerContextForExpr},
     DBError, DBResult,
@@ -88,13 +88,6 @@ impl ResolveExprRule {
         context: &OptimizerContextForExpr,
     ) -> DBResult<Option<Expression>> {
         match node {
-            Expression::Literal(Literal::UnResolvedNumber(s)) => Ok(Some(
-                s.parse::<i32>()
-                    .map(|v| Expression::Literal(Literal::Int(v)))?,
-            )),
-            Expression::Literal(Literal::UnResolvedString(s)) => {
-                Ok(Some(Expression::Literal(Literal::String(s.to_string()))))
-            }
             Expression::Literal(_) => Ok(None),
             Expression::UnResolvedFieldRef(name) => {
                 match context

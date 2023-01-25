@@ -227,6 +227,8 @@ impl CrackDB {
         let optimizer = Optimizer::new(Arc::clone(&self.catalog));
         let optimized_logical_plan = optimizer.optimize(logical_plan)?;
 
+        // println!("optimized logical plan: {:?}", optimized_logical_plan);
+
         // transform to physical plan by planning it
         let mut pysical_plan = self.planning(optimized_logical_plan)?;
 

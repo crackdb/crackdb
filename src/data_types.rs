@@ -16,6 +16,27 @@ pub enum DataType {
     Unknown,
 }
 
+impl DataType {
+    pub fn is_integer(&self) -> bool {
+        match self {
+            DataType::UInt8 => true,
+            DataType::UInt16 => true,
+            DataType::UInt32 => true,
+            DataType::UInt64 => true,
+            DataType::Int8 => true,
+            DataType::Int16 => true,
+            DataType::Int32 => true,
+            DataType::Int64 => true,
+            DataType::Float32 => false,
+            DataType::Float64 => false,
+            DataType::String => false,
+            DataType::Boolean => false,
+            DataType::DateTime => false,
+            DataType::Unknown => false,
+        }
+    }
+}
+
 impl From<sqlparser::ast::DataType> for DataType {
     fn from(dt: sqlparser::ast::DataType) -> Self {
         match dt {
