@@ -41,6 +41,25 @@ fn convert_cell_to_expr_literal(cell: &Cell) -> Literal {
     }
 }
 
+pub fn convert_expr_literal_to_cell(expr: &Literal) -> Cell {
+    match expr {
+        Literal::UInt8(v) => Cell::UInt8(*v),
+        Literal::UInt16(v) => Cell::UInt16(*v),
+        Literal::UInt32(v) => Cell::UInt32(*v),
+        Literal::UInt64(v) => Cell::UInt64(*v),
+        Literal::Int8(v) => Cell::Int8(*v),
+        Literal::Int16(v) => Cell::Int16(*v),
+        Literal::Int32(v) => Cell::Int32(*v),
+        Literal::Int64(v) => Cell::Int64(*v),
+        Literal::Float32(v) => Cell::Float32(*v),
+        Literal::Float64(v) => Cell::Float64(*v),
+        Literal::Bool(v) => Cell::Boolean(*v),
+        Literal::String(v) => Cell::String(v.to_string()),
+        Literal::DateTime(v) => Cell::DateTime(v.to_string()),
+        _ => todo!(),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cell {
     UInt8(u8),

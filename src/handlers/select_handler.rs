@@ -1,14 +1,16 @@
 use std::sync::{Arc, RwLock};
 
 use sqlparser::ast::{
-    BinaryOperator, Expr, SetExpr, Statement, TableFactor, UnaryOperator, Value,
+    BinaryOperator, Expr, SelectItem, SetExpr, Statement, TableFactor, UnaryOperator,
+    Value,
 };
 
 use crate::{
     expressions::{BinaryOp, Expression, Literal, UnaryOp},
     logical_plans::LogicalPlan,
     optimizer::Optimizer,
-    pysical_plans::{Filter, InMemTableScan, PhysicalPlan},
+    physical_plans::Projection,
+    physical_plans::{Filter, InMemTableScan, PhysicalPlan},
     Catalog, DBError, DBResult, ResultSet,
 };
 
@@ -44,12 +46,14 @@ impl SelectHandler {
         // println!("optimized logical plan: {:?}", optimized_logical_plan);
 
         // transform to physical plan by planning it
-        let mut pysical_plan = self.planning(optimized_logical_plan)?;
+        let mut physical_plan = self.planning(optimized_logical_plan)?;
+
+        // println!("physical plan: {:?}", physical_plan);
 
         // execute query
-        pysical_plan.setup()?;
-        let mut rs = ResultSet::new(pysical_plan.schema()?, Vec::new());
-        while let Some(r) = pysical_plan.next()? {
+        physical_plan.setup()?;
+        let mut rs = ResultSet::new(physical_plan.schema()?, Vec::new());
+        while let Some(r) = physical_plan.next()? {
             rs.rows.push(r);
         }
 
@@ -73,6 +77,10 @@ impl SelectHandler {
             LogicalPlan::UnResolvedScan { table: _ } => {
                 Err(DBError::Unknown("Scan is not resolved.".to_string()))
             }
+            LogicalPlan::Projection { expressions, child } => {
+                let child_plan = self.planning(*child)?;
+                Ok(Box::new(Projection::new(expressions, child_plan)))
+            }
         }
     }
 }
@@ -81,6 +89,8 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
     let logical_plan = match *query.body {
         SetExpr::Select(box_select) => {
             let select = *box_select;
+            let projections = select.projection;
+
             // FIXME: support select from multiple tables
             let table_with_join = select.from.first().unwrap();
             let scan = match &table_with_join.relation {
@@ -94,7 +104,8 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
                 },
                 _ => todo!(),
             };
-            if let Some(selection) = &select.selection {
+
+            let filter = if let Some(selection) = &select.selection {
                 let filter_expr = ast_expr_to_plan_expr(selection)?;
                 LogicalPlan::Filter {
                     expression: filter_expr,
@@ -102,6 +113,20 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
                 }
             } else {
                 scan
+            };
+
+            if is_projection_empty(&projections) {
+                filter
+            } else {
+                let mut projection_exprs = Vec::new();
+                for ele in projections {
+                    let projection = ast_projection_to_plan_expr(ele)?;
+                    projection_exprs.push(projection);
+                }
+                LogicalPlan::Projection {
+                    expressions: projection_exprs,
+                    child: Box::new(filter),
+                }
             }
         }
         _ => {
@@ -111,6 +136,30 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
         }
     };
     Ok(logical_plan)
+}
+
+fn is_projection_empty(projections: &Vec<SelectItem>) -> bool {
+    projections.is_empty()
+        || projections.len() == 1
+            && projections
+                .iter()
+                .next()
+                .filter(|p| matches!(p, SelectItem::Wildcard(_)))
+                .is_some()
+}
+
+fn ast_projection_to_plan_expr(projection: SelectItem) -> DBResult<Expression> {
+    match projection {
+        SelectItem::UnnamedExpr(expr) => ast_expr_to_plan_expr(&expr),
+        SelectItem::ExprWithAlias { expr, alias } => {
+            ast_expr_to_plan_expr(&expr).map(|expr| Expression::Alias {
+                alias: alias.to_string(),
+                child: Box::new(expr),
+            })
+        }
+        SelectItem::QualifiedWildcard(_, _) => todo!(),
+        SelectItem::Wildcard(_) => todo!(),
+    }
 }
 
 fn ast_binary_op_to_plan_binary_op(op: &BinaryOperator) -> DBResult<BinaryOp> {

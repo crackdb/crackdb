@@ -4,7 +4,7 @@ pub mod expressions;
 pub mod handlers;
 pub mod interpreter;
 pub mod logical_plans;
-pub mod pysical_plans;
+pub mod physical_plans;
 pub mod tables;
 use catalog::Catalog;
 pub use errors::*;

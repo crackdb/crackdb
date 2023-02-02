@@ -66,20 +66,21 @@ impl ResolveExprRule {
                     .iter()
                     .position(|f| f.name().eq(name))
                 {
-                    Some(idx) => Ok(Some(Expression::FieldRef(
-                        idx,
-                        context
+                    Some(idx) => Ok(Some(Expression::FieldRef {
+                        name: name.to_string(),
+                        index: idx,
+                        data_type: context
                             .schema()
                             .get_fields()
                             .get(idx)
                             .unwrap()
                             .data_type()
                             .clone(),
-                    ))),
+                    })),
                     None => Err(DBError::Unknown(format!("Cannot find field {name}"))),
                 }
             }
-            Expression::FieldRef(_, _) => Ok(None),
+            Expression::FieldRef { .. } => Ok(None),
             Expression::BinaryOp { op, left, right } => {
                 self.resolve_binary_expr_helper(context, left, right, |left, right| {
                     Expression::BinaryOp {
@@ -94,6 +95,15 @@ impl ResolveExprRule {
                     Some(input) => Ok(Some(Expression::UnaryOp {
                         op: op.clone(),
                         input: Box::new(input),
+                    })),
+                    None => Ok(None),
+                }
+            }
+            Expression::Alias { alias, child } => {
+                match self.resolve_expression(child, context)? {
+                    Some(input) => Ok(Some(Expression::Alias {
+                        alias: alias.to_string(),
+                        child: Box::new(input),
                     })),
                     None => Ok(None),
                 }

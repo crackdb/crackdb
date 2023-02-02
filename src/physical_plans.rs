@@ -1,9 +1,13 @@
+mod projection;
+
 use std::sync::{Arc, RwLock};
 
 use crate::{
     errors::DBError, errors::DBResult, expressions::Expression, interpreter::Interpreter,
     row::Row, tables::InMemTable,
 };
+
+pub use projection::Projection;
 
 pub trait PhysicalPlan {
     /// Setup this plan node, e.g. prepare some resources etc.

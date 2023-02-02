@@ -1,7 +1,7 @@
 use crate::expressions::Expression;
 use crate::optimizer::rules::Rule;
 use crate::optimizer::{OptimizerContext, OptimizerContextForExpr, OptimizerNode};
-use crate::tables::RelationSchema;
+use crate::tables::{FieldInfo, RelationSchema};
 use crate::{DBError, DBResult};
 
 #[derive(Debug, Clone)]
@@ -15,6 +15,10 @@ pub enum LogicalPlan {
     },
     Filter {
         expression: Expression,
+        child: Box<LogicalPlan>,
+    },
+    Projection {
+        expressions: Vec<Expression>,
         child: Box<LogicalPlan>,
     },
 }
@@ -34,6 +38,17 @@ impl LogicalPlan {
                 expression: _,
                 child,
             } => child.schema(),
+            LogicalPlan::Projection {
+                expressions,
+                child: _,
+            } => {
+                let fields = expressions
+                    .iter()
+                    .map(|expr| FieldInfo::new(expr.to_string(), expr.data_type()))
+                    .collect();
+                let schema = RelationSchema::new(fields);
+                Ok(schema)
+            }
         }
     }
 
@@ -46,58 +61,114 @@ impl LogicalPlan {
         match self {
             LogicalPlan::UnResolvedScan { .. } => func(self, context),
             LogicalPlan::Scan { .. } => func(self, context),
-            LogicalPlan::Filter { expression, child } => {
-                let opt_new_child = child.transform_bottom_up(context, func)?;
-                match opt_new_child {
-                    Some(new_child) => {
-                        let new_self = LogicalPlan::Filter {
-                            expression: expression.clone(),
-                            child: Box::new(new_child),
-                        };
-                        match func(&new_self, context)? {
-                            Some(new_self) => Ok(Some(new_self)),
-                            None => Ok(Some(new_self)),
-                        }
-                    }
-                    None => func(self, context),
+            LogicalPlan::Filter { expression, child } => self
+                .transform_bottom_up_for_single_child_plan(
+                    child,
+                    context,
+                    func,
+                    |updated_child| LogicalPlan::Filter {
+                        expression: expression.clone(),
+                        child: Box::new(updated_child),
+                    },
+                ),
+            LogicalPlan::Projection { expressions, child } => self
+                .transform_bottom_up_for_single_child_plan(
+                    child,
+                    context,
+                    func,
+                    |updated_child| LogicalPlan::Projection {
+                        expressions: expressions.clone(),
+                        child: Box::new(updated_child),
+                    },
+                ),
+        }
+    }
+
+    fn transform_bottom_up_for_single_child_plan(
+        &self,
+        child: &LogicalPlan,
+        context: &OptimizerContext,
+        func: fn(&Self, &OptimizerContext) -> DBResult<Option<Self>>,
+        builder: impl FnOnce(LogicalPlan) -> LogicalPlan,
+    ) -> DBResult<Option<Self>> {
+        let opt_new_child = child.transform_bottom_up(context, func)?;
+        match opt_new_child {
+            Some(new_child) => {
+                let new_self = builder(new_child);
+                match func(&new_self, context)? {
+                    Some(new_self) => Ok(Some(new_self)),
+                    None => Ok(Some(new_self)),
                 }
             }
+            None => func(self, context),
         }
     }
 
     pub fn transform_exprs(
         &self,
         rule: &dyn Rule<Expression>,
-        _context: &OptimizerContext,
+        context: &OptimizerContext,
     ) -> DBResult<Option<Self>> {
         match self {
             LogicalPlan::UnResolvedScan { .. } => Ok(None),
             LogicalPlan::Scan { .. } => Ok(None),
             LogicalPlan::Filter { expression, child } => {
-                let new_child = child.transform_exprs(rule, _context)?;
-                let schema = match &new_child {
-                    Some(new_child) => new_child.schema()?,
-                    None => child.schema()?,
-                };
-                let context_for_expr = OptimizerContextForExpr::new(schema);
-                let new_expr = rule.apply(expression, &context_for_expr)?;
-                match (new_child, new_expr) {
-                    (None, None) => Ok(None),
-                    // TODO: can/should we avoid clone child?
-                    (None, Some(expression)) => Ok(Some(LogicalPlan::Filter {
-                        expression,
-                        child: child.clone(),
-                    })),
-                    (Some(child), None) => Ok(Some(LogicalPlan::Filter {
-                        expression: expression.clone(),
+                let expressions = vec![expression.clone()];
+                self.transform_exprs_for_single_child_plan(
+                    &expressions,
+                    child,
+                    rule,
+                    context,
+                    |expressions, child| LogicalPlan::Filter {
+                        expression: expressions.into_iter().next().unwrap(),
                         child: Box::new(child),
-                    })),
-                    (Some(child), Some(expression)) => Ok(Some(LogicalPlan::Filter {
-                        expression,
-                        child: Box::new(child),
-                    })),
-                }
+                    },
+                )
             }
+            LogicalPlan::Projection { expressions, child } => self
+                .transform_exprs_for_single_child_plan(
+                    expressions,
+                    child,
+                    rule,
+                    context,
+                    |expressions, child| LogicalPlan::Projection {
+                        expressions,
+                        child: Box::new(child),
+                    },
+                ),
+        }
+    }
+
+    fn transform_exprs_for_single_child_plan(
+        &self,
+        expressions: &Vec<Expression>,
+        child: &LogicalPlan,
+        rule: &dyn Rule<Expression>,
+        context: &OptimizerContext,
+        builder: impl FnOnce(Vec<Expression>, LogicalPlan) -> LogicalPlan,
+    ) -> DBResult<Option<Self>> {
+        let new_child = child.transform_exprs(rule, context)?;
+        let schema = match &new_child {
+            Some(new_child) => new_child.schema()?,
+            None => child.schema()?,
+        };
+        let context_for_expr = OptimizerContextForExpr::new(schema);
+        let mut any_expr_transformed = false;
+        let mut new_exprs = Vec::new();
+        for expr in expressions {
+            if let Some(transformed) = rule.apply(expr, &context_for_expr)? {
+                any_expr_transformed = true;
+                new_exprs.push(transformed);
+            } else {
+                new_exprs.push(expr.clone());
+            }
+        }
+        match (new_child, any_expr_transformed) {
+            (None, false) => Ok(None),
+            // TODO: can/should we avoid clone child?
+            (None, true) => Ok(Some(builder(new_exprs, child.clone()))),
+            (Some(child), false) => Ok(Some(builder(new_exprs, child))),
+            (Some(child), true) => Ok(Some(builder(new_exprs, child))),
         }
     }
 }

@@ -23,7 +23,7 @@ impl Interpreter {
             Expression::UnResolvedFieldRef(_field) => Err(DBError::Unknown(
                 "Trying evaluate an unresolved expression.".to_string(),
             )),
-            Expression::FieldRef(idx, _) => row.get_field(*idx),
+            Expression::FieldRef { index, .. } => row.get_field(*index),
             Expression::BinaryOp { op, left, right } => {
                 let (left, right) = (Self::eval(left, row)?, Self::eval(right, row)?);
                 match op {
@@ -44,6 +44,7 @@ impl Interpreter {
                 UnaryOp::Not => not_impl(Self::eval(input, row)?),
                 UnaryOp::Neg => negative_impl(Self::eval(input, row)?),
             },
+            Expression::Alias { alias: _, child } => Self::eval(child, row),
         }
     }
 }

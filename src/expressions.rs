@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::data_types::DataType;
 use crate::optimizer::{OptimizerContextForExpr, OptimizerNode};
 use crate::DBError;
@@ -7,7 +9,15 @@ use crate::DBResult;
 pub enum Expression {
     Literal(Literal),
     UnResolvedFieldRef(String),
-    FieldRef(usize, DataType),
+    FieldRef {
+        name: String,
+        index: usize,
+        data_type: DataType,
+    },
+    Alias {
+        alias: String,
+        child: Box<Expression>,
+    },
     BinaryOp {
         op: BinaryOp,
         left: Box<Expression>,
@@ -17,6 +27,21 @@ pub enum Expression {
         op: UnaryOp,
         input: Box<Expression>,
     },
+}
+
+impl Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expression::Literal(l) => l.fmt(f),
+            Expression::UnResolvedFieldRef(name) => name.fmt(f),
+            Expression::FieldRef { name, .. } => name.fmt(f),
+            Expression::Alias { alias, child: _ } => alias.fmt(f),
+            Expression::BinaryOp { op, left, right } => {
+                write!(f, "{left}_{op}_{right}")
+            }
+            Expression::UnaryOp { op, input } => write!(f, "{op}_{input}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +57,24 @@ pub enum BinaryOp {
     Lte,
     And,
     Or,
+}
+
+impl Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOp::Plus => "+".fmt(f),
+            BinaryOp::Minus => "-".fmt(f),
+            BinaryOp::Divide => "/".fmt(f),
+            BinaryOp::Multiply => "*".fmt(f),
+            BinaryOp::Gt => ">".fmt(f),
+            BinaryOp::Gte => ">=".fmt(f),
+            BinaryOp::Eq => "=".fmt(f),
+            BinaryOp::Lt => "<".fmt(f),
+            BinaryOp::Lte => "<=".fmt(f),
+            BinaryOp::And => "AND".fmt(f),
+            BinaryOp::Or => "OR".fmt(f),
+        }
+    }
 }
 
 impl BinaryOp {
@@ -55,6 +98,15 @@ pub enum UnaryOp {
     Neg,
 }
 
+impl Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnaryOp::Not => "NOT".fmt(f),
+            UnaryOp::Neg => "-".fmt(f),
+        }
+    }
+}
+
 impl OptimizerNode for Expression {
     type Context = OptimizerContextForExpr;
 }
@@ -64,12 +116,13 @@ impl Expression {
         match self {
             Expression::Literal(l) => l.data_type(),
             Expression::UnResolvedFieldRef(_) => DataType::Unknown,
-            Expression::FieldRef(_, data_type) => data_type.clone(),
+            Expression::FieldRef { data_type, .. } => data_type.clone(),
             Expression::BinaryOp { op, left, right: _ } => match op {
                 op if op.is_boolean_op() => DataType::Boolean,
                 _ => left.data_type(),
             },
             Expression::UnaryOp { input, .. } => input.data_type(),
+            Expression::Alias { alias: _, child } => child.data_type(),
         }
     }
 
@@ -81,7 +134,7 @@ impl Expression {
         match self {
             Expression::Literal(_) => func(self, context),
             Expression::UnResolvedFieldRef(_) => func(self, context),
-            Expression::FieldRef(_, _) => func(self, context),
+            Expression::FieldRef { .. } => func(self, context),
             Expression::BinaryOp { op, left, right } => {
                 match (
                     left.transform_bottom_up(context, func)?,
@@ -138,6 +191,21 @@ impl Expression {
                     None => func(self, context),
                 }
             }
+            Expression::Alias { alias, child } => {
+                match child.transform_bottom_up(context, func)? {
+                    Some(updated_child) => {
+                        let updated = Expression::Alias {
+                            alias: alias.clone(),
+                            child: Box::new(updated_child),
+                        };
+                        match func(&updated, context)? {
+                            Some(updated) => Ok(Some(updated)),
+                            None => Ok(Some(updated)),
+                        }
+                    }
+                    None => func(self, context),
+                }
+            }
         }
     }
 }
@@ -160,6 +228,29 @@ pub enum Literal {
     String(String),
     DateTime(String),
     Null,
+}
+
+impl Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Literal::UnResolvedNumber(n) => n.fmt(f),
+            Literal::UnResolvedString(s) => s.fmt(f),
+            Literal::UInt8(v) => v.fmt(f),
+            Literal::UInt16(v) => v.fmt(f),
+            Literal::UInt32(v) => v.fmt(f),
+            Literal::UInt64(v) => v.fmt(f),
+            Literal::Int8(v) => v.fmt(f),
+            Literal::Int16(v) => v.fmt(f),
+            Literal::Int32(v) => v.fmt(f),
+            Literal::Int64(v) => v.fmt(f),
+            Literal::Float32(v) => v.fmt(f),
+            Literal::Float64(v) => v.fmt(f),
+            Literal::Bool(v) => v.fmt(f),
+            Literal::String(v) => v.fmt(f),
+            Literal::DateTime(v) => v.fmt(f),
+            Literal::Null => "null".fmt(f),
+        }
+    }
 }
 
 impl Literal {
