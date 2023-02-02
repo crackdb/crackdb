@@ -1,6 +1,6 @@
 use crate::{
     data_types::DataType,
-    expressions::{BooleanExpr, Expression},
+    expressions::Expression,
     logical_plans::LogicalPlan,
     optimizer::{OptimizerContext, OptimizerContextForExpr},
     DBResult,
@@ -26,73 +26,41 @@ impl Rule<Expression> for ResolveLiteralTypesRule {
         node: &Expression,
         context: &OptimizerContextForExpr,
     ) -> crate::DBResult<Option<Expression>> {
-        match node {
-            Expression::BooleanExpr(boolean_expr) => self
-                .resolve_literal_types(boolean_expr, context)
-                .map(|opt_expr| {
-                    opt_expr.map(|expr| Expression::BooleanExpr(Box::new(expr)))
-                }),
-            _ => Ok(None),
-        }
+        node.transform_bottom_up(context, Self::resolve_literal_type)
     }
 }
 
 impl ResolveLiteralTypesRule {
-    fn resolve_literal_types(
-        &self,
-        expr: &BooleanExpr,
+    fn resolve_literal_type(
+        expr: &Expression,
         _context: &OptimizerContextForExpr,
-    ) -> DBResult<Option<BooleanExpr>> {
+    ) -> DBResult<Option<Expression>> {
         match expr {
-            BooleanExpr::GT { left, right } => {
-                self.align_data_type(left, right, |left, right| BooleanExpr::GT {
-                    left,
-                    right,
+            Expression::BinaryOp { op, left, right } => {
+                Self::align_data_type(left, right, |left, right| Expression::BinaryOp {
+                    op: op.clone(),
+                    left: Box::new(left),
+                    right: Box::new(right),
                 })
             }
-            BooleanExpr::GTE { left, right } => {
-                self.align_data_type(left, right, |left, right| BooleanExpr::GTE {
-                    left,
-                    right,
-                })
-            }
-            BooleanExpr::EQ { left, right } => {
-                self.align_data_type(left, right, |left, right| BooleanExpr::EQ {
-                    left,
-                    right,
-                })
-            }
-            BooleanExpr::LT { left, right } => {
-                self.align_data_type(left, right, |left, right| BooleanExpr::LT {
-                    left,
-                    right,
-                })
-            }
-            BooleanExpr::LTE { left, right } => {
-                self.align_data_type(left, right, |left, right| BooleanExpr::LTE {
-                    left,
-                    right,
-                })
-            }
+            _ => Ok(None),
         }
     }
-
     fn align_data_type<F>(
-        &self,
         left: &Expression,
         right: &Expression,
         builder: F,
-    ) -> DBResult<Option<BooleanExpr>>
+    ) -> DBResult<Option<Expression>>
     where
-        F: FnOnce(Expression, Expression) -> BooleanExpr,
+        F: FnOnce(Expression, Expression) -> Expression,
     {
         if left.data_type() != DataType::Unknown && right.data_type() == DataType::Unknown
         {
-            self.align_data_type_left_to_right(left, right, builder)
+            Self::align_data_type_left_to_right(left, right, builder)
         } else if right.data_type() != DataType::Unknown
             && left.data_type() == DataType::Unknown
         {
-            self.align_data_type_left_to_right(right, left, |right, left| {
+            Self::align_data_type_left_to_right(right, left, |right, left| {
                 builder(left, right)
             })
         } else {
@@ -102,16 +70,15 @@ impl ResolveLiteralTypesRule {
 
     /// transform the right expression to align it with left expression data type
     fn align_data_type_left_to_right<F>(
-        &self,
         left: &Expression,
         right: &Expression,
         builder: F,
-    ) -> DBResult<Option<BooleanExpr>>
+    ) -> DBResult<Option<Expression>>
     where
-        F: FnOnce(Expression, Expression) -> BooleanExpr,
+        F: FnOnce(Expression, Expression) -> Expression,
     {
         if let Some(resolved_right) =
-            self.transform_expression_with_type_hint(right, left.data_type())?
+            Self::transform_expression_with_type_hint(right, left.data_type())?
         {
             if left.data_type() == resolved_right.data_type() {
                 Ok(Some(builder(left.clone(), resolved_right)))
@@ -127,7 +94,6 @@ impl ResolveLiteralTypesRule {
     /// transform a expression (focus on literal expressions) with given data type hint.
     /// For example, transform an UnresolvedString into a String or DataTime etc.
     fn transform_expression_with_type_hint(
-        &self,
         expr: &Expression,
         type_hint: DataType,
     ) -> DBResult<Option<Expression>> {

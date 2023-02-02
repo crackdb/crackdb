@@ -6,6 +6,7 @@ use sqlparser::parser::ParserError;
 pub enum DBError {
     ParserError(String),
     TableNotFound(String),
+    InterpretingError(String),
     Unknown(String),
 }
 
@@ -19,12 +20,12 @@ impl From<ParserError> for DBError {
 
 impl From<ParseFloatError> for DBError {
     fn from(e: ParseFloatError) -> Self {
-        DBError::ParserError(format!("cannot parse float number: {}", e))
+        DBError::ParserError(format!("cannot parse float number: {e}"))
     }
 }
 
 impl From<ParseIntError> for DBError {
     fn from(e: ParseIntError) -> Self {
-        DBError::ParserError(format!("cannot parse int number: {}", e))
+        DBError::ParserError(format!("cannot parse int number: {e}"))
     }
 }

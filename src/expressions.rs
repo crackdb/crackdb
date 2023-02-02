@@ -1,14 +1,58 @@
 use crate::data_types::DataType;
 use crate::optimizer::{OptimizerContextForExpr, OptimizerNode};
 use crate::DBError;
-use crate::{row::Row, DBResult};
+use crate::DBResult;
 
 #[derive(Debug, Clone)]
 pub enum Expression {
     Literal(Literal),
     UnResolvedFieldRef(String),
     FieldRef(usize, DataType),
-    BooleanExpr(Box<BooleanExpr>),
+    BinaryOp {
+        op: BinaryOp,
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    UnaryOp {
+        op: UnaryOp,
+        input: Box<Expression>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum BinaryOp {
+    Plus,
+    Minus,
+    Divide,
+    Multiply,
+    Gt,
+    Gte,
+    Eq,
+    Lt,
+    Lte,
+    And,
+    Or,
+}
+
+impl BinaryOp {
+    pub fn is_boolean_op(&self) -> bool {
+        matches!(
+            self,
+            BinaryOp::Gt
+                | BinaryOp::Gte
+                | BinaryOp::Eq
+                | BinaryOp::Lt
+                | BinaryOp::Lte
+                | BinaryOp::And
+                | BinaryOp::Or
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum UnaryOp {
+    Not,
+    Neg,
 }
 
 impl OptimizerNode for Expression {
@@ -16,58 +60,84 @@ impl OptimizerNode for Expression {
 }
 
 impl Expression {
-    pub fn eval(&self, row: &Row) -> DBResult<Literal> {
-        match self {
-            Self::Literal(l) => Ok(l.clone()),
-            Self::UnResolvedFieldRef(_field) => Err(crate::DBError::Unknown(
-                "Trying evaluate an unresolved expression.".to_string(),
-            )),
-            Self::FieldRef(idx, _) => row.get_field(*idx),
-            Self::BooleanExpr(ref bool_expr) => bool_expr.eval(row),
-        }
-    }
-
     pub fn data_type(&self) -> DataType {
         match self {
             Expression::Literal(l) => l.data_type(),
             Expression::UnResolvedFieldRef(_) => DataType::Unknown,
             Expression::FieldRef(_, data_type) => data_type.clone(),
-            Expression::BooleanExpr(_) => DataType::Boolean,
+            Expression::BinaryOp { op, left, right: _ } => match op {
+                op if op.is_boolean_op() => DataType::Boolean,
+                _ => left.data_type(),
+            },
+            Expression::UnaryOp { input, .. } => input.data_type(),
         }
     }
-}
 
-#[derive(Debug, Clone)]
-pub enum BooleanExpr {
-    GT { left: Expression, right: Expression },
-    GTE { left: Expression, right: Expression },
-    EQ { left: Expression, right: Expression },
-    LT { left: Expression, right: Expression },
-    LTE { left: Expression, right: Expression },
-}
-
-impl BooleanExpr {
-    pub fn eval(&self, row: &Row) -> DBResult<Literal> {
+    pub fn transform_bottom_up(
+        &self,
+        context: &OptimizerContextForExpr,
+        func: fn(&Expression, &OptimizerContextForExpr) -> DBResult<Option<Expression>>,
+    ) -> DBResult<Option<Expression>> {
         match self {
-            BooleanExpr::GT { left, right } => {
-                match (left.eval(row)?, right.eval(row)?) {
-                    (Literal::Int32(left), Literal::Int32(right)) => {
-                        Ok(Literal::Bool(left > right))
+            Expression::Literal(_) => func(self, context),
+            Expression::UnResolvedFieldRef(_) => func(self, context),
+            Expression::FieldRef(_, _) => func(self, context),
+            Expression::BinaryOp { op, left, right } => {
+                match (
+                    left.transform_bottom_up(context, func)?,
+                    right.transform_bottom_up(context, func)?,
+                ) {
+                    (None, None) => func(self, context),
+                    (None, Some(right)) => {
+                        let updated = Expression::BinaryOp {
+                            op: op.clone(),
+                            left: left.clone(),
+                            right: Box::new(right),
+                        };
+                        match func(&updated, context)? {
+                            None => Ok(Some(updated)),
+                            Some(updated) => Ok(Some(updated)),
+                        }
                     }
-                    _ => todo!(),
+                    (Some(left), None) => {
+                        let updated = Expression::BinaryOp {
+                            op: op.clone(),
+                            left: Box::new(left),
+                            right: right.clone(),
+                        };
+                        match func(&updated, context)? {
+                            None => Ok(Some(updated)),
+                            Some(updated) => Ok(Some(updated)),
+                        }
+                    }
+                    (Some(left), Some(right)) => {
+                        let updated = Expression::BinaryOp {
+                            op: op.clone(),
+                            left: Box::new(left),
+                            right: Box::new(right),
+                        };
+                        match func(&updated, context)? {
+                            None => Ok(Some(updated)),
+                            Some(updated) => Ok(Some(updated)),
+                        }
+                    }
                 }
             }
-            BooleanExpr::GTE { left: _, right: _ } => todo!(),
-            BooleanExpr::EQ { left, right } => {
-                match (left.eval(row)?, right.eval(row)?) {
-                    (Literal::Int32(v1), Literal::Int32(v2)) => {
-                        Ok(Literal::Bool(v1 == v2))
+            Expression::UnaryOp { op, input } => {
+                match input.transform_bottom_up(context, func)? {
+                    Some(updated_input) => {
+                        let updated = Expression::UnaryOp {
+                            op: op.clone(),
+                            input: Box::new(updated_input),
+                        };
+                        match func(&updated, context)? {
+                            Some(updated) => Ok(Some(updated)),
+                            None => Ok(Some(updated)),
+                        }
                     }
-                    _ => todo!(),
+                    None => func(self, context),
                 }
             }
-            BooleanExpr::LT { left: _, right: _ } => todo!(),
-            BooleanExpr::LTE { left: _, right: _ } => todo!(),
         }
     }
 }

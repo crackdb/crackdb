@@ -1,8 +1,8 @@
 use std::sync::{Arc, RwLock};
 
 use crate::{
-    errors::DBError, errors::DBResult, expressions::Expression, row::Row,
-    tables::InMemTable,
+    errors::DBError, errors::DBResult, expressions::Expression, interpreter::Interpreter,
+    row::Row, tables::InMemTable,
 };
 
 pub trait PhysicalPlan {
@@ -76,7 +76,7 @@ impl PhysicalPlan for Filter {
 
     fn next(&mut self) -> DBResult<Option<Row>> {
         while let Some(row) = self.child.next()? {
-            if self.expression.eval(&row)?.as_bool()? {
+            if Interpreter::eval(&self.expression, &row)?.as_bool()? {
                 return Ok(Some(row));
             }
         }

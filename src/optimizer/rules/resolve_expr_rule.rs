@@ -1,5 +1,5 @@
 use crate::{
-    expressions::{BooleanExpr, Expression},
+    expressions::Expression,
     logical_plans::LogicalPlan,
     optimizer::{OptimizerContext, OptimizerContextForExpr},
     DBError, DBResult,
@@ -29,48 +29,18 @@ impl Rule<Expression> for ResolveExprRule {
         self.resolve_expression(node, context)
     }
 }
-impl ResolveExprRule {
-    fn resolve_boolean_expression(
-        &self,
-        expr: &BooleanExpr,
-        context: &OptimizerContextForExpr,
-    ) -> DBResult<Option<BooleanExpr>> {
-        match expr {
-            BooleanExpr::GT { left, right } => {
-                self.resolve_boolean_expr_helper(context, left, right, |left, right| {
-                    BooleanExpr::GT { left, right }
-                })
-            }
-            BooleanExpr::GTE { left, right } => {
-                self.resolve_boolean_expr_helper(context, left, right, |left, right| {
-                    BooleanExpr::GTE { left, right }
-                })
-            }
-            BooleanExpr::EQ { left, right } => {
-                self.resolve_boolean_expr_helper(context, left, right, |left, right| {
-                    BooleanExpr::EQ { left, right }
-                })
-            }
-            BooleanExpr::LT { left, right } => {
-                self.resolve_boolean_expr_helper(context, left, right, |left, right| {
-                    BooleanExpr::LT { left, right }
-                })
-            }
-            BooleanExpr::LTE { left, right } => {
-                self.resolve_boolean_expr_helper(context, left, right, |left, right| {
-                    BooleanExpr::LTE { left, right }
-                })
-            }
-        }
-    }
 
-    fn resolve_boolean_expr_helper(
+impl ResolveExprRule {
+    fn resolve_binary_expr_helper<F>(
         &self,
         context: &OptimizerContextForExpr,
         left: &Expression,
         right: &Expression,
-        builder: fn(Expression, Expression) -> BooleanExpr,
-    ) -> DBResult<Option<BooleanExpr>> {
+        builder: F,
+    ) -> DBResult<Option<Expression>>
+    where
+        F: FnOnce(Expression, Expression) -> Expression,
+    {
         match (
             self.resolve_expression(left, context)?,
             self.resolve_expression(right, context)?,
@@ -106,17 +76,28 @@ impl ResolveExprRule {
                             .data_type()
                             .clone(),
                     ))),
-                    None => Err(DBError::Unknown(format!("Cannot find field {}", name))),
+                    None => Err(DBError::Unknown(format!("Cannot find field {name}"))),
                 }
             }
             Expression::FieldRef(_, _) => Ok(None),
-            Expression::BooleanExpr(boolean_expr) => self
-                .resolve_boolean_expression(boolean_expr, context)
-                .map(|opt_resolved_expr| {
-                    opt_resolved_expr.map(|resolved_expr| {
-                        Expression::BooleanExpr(Box::new(resolved_expr))
-                    })
-                }),
+            Expression::BinaryOp { op, left, right } => {
+                self.resolve_binary_expr_helper(context, left, right, |left, right| {
+                    Expression::BinaryOp {
+                        op: op.clone(),
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    }
+                })
+            }
+            Expression::UnaryOp { op, input } => {
+                match self.resolve_expression(input, context)? {
+                    Some(input) => Ok(Some(Expression::UnaryOp {
+                        op: op.clone(),
+                        input: Box::new(input),
+                    })),
+                    None => Ok(None),
+                }
+            }
         }
     }
 }

@@ -1,9 +1,11 @@
 use std::sync::{Arc, RwLock};
 
-use sqlparser::ast::{BinaryOperator, Expr, SetExpr, Statement, TableFactor, Value};
+use sqlparser::ast::{
+    BinaryOperator, Expr, SetExpr, Statement, TableFactor, UnaryOperator, Value,
+};
 
 use crate::{
-    expressions::{BooleanExpr, Expression, Literal},
+    expressions::{BinaryOp, Expression, Literal, UnaryOp},
     logical_plans::LogicalPlan,
     optimizer::Optimizer,
     pysical_plans::{Filter, InMemTableScan, PhysicalPlan},
@@ -93,7 +95,7 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
                 _ => todo!(),
             };
             if let Some(selection) = &select.selection {
-                let filter_expr = ast_expr_to_plan_expr(selection);
+                let filter_expr = ast_expr_to_plan_expr(selection)?;
                 LogicalPlan::Filter {
                     expression: filter_expr,
                     child: Box::new(scan),
@@ -111,55 +113,68 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
     Ok(logical_plan)
 }
 
-fn ast_expr_to_plan_expr(expr: &Expr) -> Expression {
+fn ast_binary_op_to_plan_binary_op(op: &BinaryOperator) -> DBResult<BinaryOp> {
+    match op {
+        BinaryOperator::Plus => Ok(BinaryOp::Plus),
+        BinaryOperator::Minus => Ok(BinaryOp::Minus),
+        BinaryOperator::Multiply => Ok(BinaryOp::Multiply),
+        BinaryOperator::Divide => Ok(BinaryOp::Divide),
+        BinaryOperator::Modulo => todo!(),
+        BinaryOperator::StringConcat => todo!(),
+        BinaryOperator::Gt => Ok(BinaryOp::Gt),
+        BinaryOperator::Lt => Ok(BinaryOp::Lt),
+        BinaryOperator::GtEq => Ok(BinaryOp::Gte),
+        BinaryOperator::LtEq => Ok(BinaryOp::Lte),
+        BinaryOperator::Spaceship => todo!(),
+        BinaryOperator::Eq => Ok(BinaryOp::Eq),
+        BinaryOperator::NotEq => todo!(),
+        BinaryOperator::And => Ok(BinaryOp::And),
+        BinaryOperator::Or => Ok(BinaryOp::Or),
+        BinaryOperator::Xor => todo!(),
+        BinaryOperator::BitwiseOr => todo!(),
+        BinaryOperator::BitwiseAnd => todo!(),
+        BinaryOperator::BitwiseXor => todo!(),
+        BinaryOperator::PGBitwiseXor => todo!(),
+        BinaryOperator::PGBitwiseShiftLeft => todo!(),
+        BinaryOperator::PGBitwiseShiftRight => todo!(),
+        BinaryOperator::PGRegexMatch => todo!(),
+        BinaryOperator::PGRegexIMatch => todo!(),
+        BinaryOperator::PGRegexNotMatch => todo!(),
+        BinaryOperator::PGRegexNotIMatch => todo!(),
+        BinaryOperator::PGCustomBinaryOperator(_) => todo!(),
+    }
+}
+
+fn ast_unary_op_to_plan_unary_op(op: &UnaryOperator) -> DBResult<UnaryOp> {
+    match op {
+        UnaryOperator::Plus => todo!(),
+        UnaryOperator::Minus => Ok(UnaryOp::Neg),
+        UnaryOperator::Not => Ok(UnaryOp::Not),
+        UnaryOperator::PGBitwiseNot => todo!(),
+        UnaryOperator::PGSquareRoot => todo!(),
+        UnaryOperator::PGCubeRoot => todo!(),
+        UnaryOperator::PGPostfixFactorial => todo!(),
+        UnaryOperator::PGPrefixFactorial => todo!(),
+        UnaryOperator::PGAbs => todo!(),
+    }
+}
+
+fn ast_expr_to_plan_expr(expr: &Expr) -> DBResult<Expression> {
     match expr {
-        Expr::BinaryOp {
-            left,
-            op: BinaryOperator::Gt,
-            right,
-        } => Expression::BooleanExpr(Box::new(BooleanExpr::GT {
-            left: ast_expr_to_plan_expr(left),
-            right: ast_expr_to_plan_expr(right),
-        })),
-        Expr::BinaryOp {
-            left,
-            op: BinaryOperator::Eq,
-            right,
-        } => Expression::BooleanExpr(Box::new(BooleanExpr::EQ {
-            left: ast_expr_to_plan_expr(left),
-            right: ast_expr_to_plan_expr(right),
-        })),
-        Expr::BinaryOp {
-            left,
-            op: BinaryOperator::GtEq,
-            right,
-        } => Expression::BooleanExpr(Box::new(BooleanExpr::GTE {
-            left: ast_expr_to_plan_expr(left),
-            right: ast_expr_to_plan_expr(right),
-        })),
-        Expr::BinaryOp {
-            left,
-            op: BinaryOperator::Lt,
-            right,
-        } => Expression::BooleanExpr(Box::new(BooleanExpr::LT {
-            left: ast_expr_to_plan_expr(left),
-            right: ast_expr_to_plan_expr(right),
-        })),
-        Expr::BinaryOp {
-            left,
-            op: BinaryOperator::LtEq,
-            right,
-        } => Expression::BooleanExpr(Box::new(BooleanExpr::LTE {
-            left: ast_expr_to_plan_expr(left),
-            right: ast_expr_to_plan_expr(right),
-        })),
-        Expr::BinaryOp {
-            left: _,
-            op: _,
-            right: _,
-        } => todo!(),
+        Expr::BinaryOp { left, op, right } => {
+            let (left, op, right) = (
+                ast_expr_to_plan_expr(left)?,
+                ast_binary_op_to_plan_binary_op(op)?,
+                ast_expr_to_plan_expr(right)?,
+            );
+            Ok(Expression::BinaryOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            })
+        }
         Expr::Identifier(identifier) => {
-            Expression::UnResolvedFieldRef(identifier.value.to_string())
+            Ok(Expression::UnResolvedFieldRef(identifier.value.to_string()))
         }
         Expr::Value(v) => {
             let literal = match v {
@@ -175,7 +190,7 @@ fn ast_expr_to_plan_expr(expr: &Expr) -> Expression {
                 Value::Placeholder(_) => todo!(),
                 Value::UnQuotedString(_) => todo!(),
             };
-            Expression::Literal(literal)
+            Ok(Expression::Literal(literal))
         }
         Expr::CompoundIdentifier(_) => todo!(),
         Expr::JsonAccess {
@@ -235,7 +250,16 @@ fn ast_expr_to_plan_expr(expr: &Expr) -> Expression {
         } => todo!(),
         Expr::AnyOp(_) => todo!(),
         Expr::AllOp(_) => todo!(),
-        Expr::UnaryOp { op: _, expr: _ } => todo!(),
+        Expr::UnaryOp { op, expr } => {
+            let (op, expr) = (
+                ast_unary_op_to_plan_unary_op(op)?,
+                ast_expr_to_plan_expr(expr)?,
+            );
+            Ok(Expression::UnaryOp {
+                op,
+                input: Box::new(expr),
+            })
+        }
         Expr::Cast {
             expr: _,
             data_type: _,

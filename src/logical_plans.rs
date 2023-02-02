@@ -47,7 +47,7 @@ impl LogicalPlan {
             LogicalPlan::UnResolvedScan { .. } => func(self, context),
             LogicalPlan::Scan { .. } => func(self, context),
             LogicalPlan::Filter { expression, child } => {
-                let opt_new_child = func(child, context)?;
+                let opt_new_child = child.transform_bottom_up(context, func)?;
                 match opt_new_child {
                     Some(new_child) => {
                         let new_self = LogicalPlan::Filter {
