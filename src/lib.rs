@@ -1,3 +1,4 @@
+mod aggregators;
 pub mod catalog;
 mod errors;
 pub mod expressions;
@@ -9,6 +10,7 @@ pub mod tables;
 use catalog::Catalog;
 pub use errors::*;
 use handlers::{CreateTableHandler, InsertHandler, QueryHandler, SelectHandler};
+use tables::RelationSchema;
 
 pub mod data_types;
 pub mod row;
@@ -35,19 +37,19 @@ impl Default for CrackDB {
 
 #[derive(Debug, PartialEq)]
 pub struct ResultSet {
-    pub headers: Vec<String>,
-    pub rows: Vec<Row>,
+    pub schema: RelationSchema,
+    pub rows: Vec<Row<'static>>,
 }
 
 impl ResultSet {
     pub fn empty() -> Self {
         ResultSet {
-            headers: vec![],
+            schema: RelationSchema::new(vec![]),
             rows: vec![],
         }
     }
-    pub fn new(headers: Vec<String>, rows: Vec<Row>) -> Self {
-        ResultSet { headers, rows }
+    pub fn new(schema: RelationSchema, rows: Vec<Row<'static>>) -> Self {
+        ResultSet { schema, rows }
     }
 }
 

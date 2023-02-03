@@ -45,6 +45,7 @@ impl Interpreter {
                 UnaryOp::Neg => negative_impl(Self::eval(input, row)?),
             },
             Expression::Alias { alias: _, child } => Self::eval(child, row),
+            Expression::Function { .. } => todo!(),
         }
     }
 }

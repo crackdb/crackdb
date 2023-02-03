@@ -46,6 +46,7 @@ impl ResolveLiteralTypesRule {
             _ => Ok(None),
         }
     }
+
     fn align_data_type<F>(
         left: &Expression,
         right: &Expression,

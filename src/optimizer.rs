@@ -23,6 +23,7 @@ pub struct OptimizerContextForExpr {
 pub struct OptimizerContext {
     catalog: Arc<RwLock<Catalog>>,
 }
+
 impl OptimizerContext {
     fn try_get_table(&self, table_name: &str) -> DBResult<Arc<RwLock<InMemTable>>> {
         let db = self

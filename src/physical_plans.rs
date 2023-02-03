@@ -1,26 +1,32 @@
+mod hash_aggregator;
 mod projection;
 
 use std::sync::{Arc, RwLock};
 
 use crate::{
-    errors::DBError, errors::DBResult, expressions::Expression, interpreter::Interpreter,
-    row::Row, tables::InMemTable,
+    errors::DBError,
+    errors::DBResult,
+    expressions::Expression,
+    interpreter::Interpreter,
+    row::Row,
+    tables::{InMemTable, RelationSchema},
 };
 
+pub use hash_aggregator::HashAggregator;
 pub use projection::Projection;
 
 pub trait PhysicalPlan {
     /// Setup this plan node, e.g. prepare some resources etc.
     fn setup(&mut self) -> DBResult<()>;
     /// Acting like an iterator to get the next now if present
-    fn next(&mut self) -> DBResult<Option<Row>>;
+    fn next(&mut self) -> DBResult<Option<Row<'static>>>;
     /// Return the schema/shape of the output rows.
-    fn schema(&self) -> DBResult<Vec<String>>;
+    fn schema(&self) -> DBResult<RelationSchema>;
 }
 
 pub struct InMemTableScan {
     table: Arc<RwLock<InMemTable>>,
-    snapshot: Option<Vec<Row>>,
+    snapshot: Option<Vec<Row<'static>>>,
     next: usize,
 }
 
@@ -44,7 +50,7 @@ impl PhysicalPlan for InMemTableScan {
         Ok(())
     }
 
-    fn next(&mut self) -> DBResult<Option<Row>> {
+    fn next(&mut self) -> DBResult<Option<Row<'static>>> {
         let next = self
             .snapshot
             .as_ref()
@@ -54,11 +60,11 @@ impl PhysicalPlan for InMemTableScan {
         Ok(next)
     }
 
-    fn schema(&self) -> DBResult<Vec<String>> {
+    fn schema(&self) -> DBResult<RelationSchema> {
         let table = self.table.as_ref().read().map_err(|_e| {
             DBError::Unknown("Access read lock of table failed!".to_string())
         })?;
-        Ok(table.headers())
+        Ok(table.get_table_meta().get_schema().clone())
     }
 }
 
@@ -78,7 +84,7 @@ impl PhysicalPlan for Filter {
         self.child.setup()
     }
 
-    fn next(&mut self) -> DBResult<Option<Row>> {
+    fn next(&mut self) -> DBResult<Option<Row<'static>>> {
         while let Some(row) = self.child.next()? {
             if Interpreter::eval(&self.expression, &row)?.as_bool()? {
                 return Ok(Some(row));
@@ -87,7 +93,7 @@ impl PhysicalPlan for Filter {
         Ok(None)
     }
 
-    fn schema(&self) -> DBResult<Vec<String>> {
+    fn schema(&self) -> DBResult<RelationSchema> {
         self.child.schema()
     }
 }

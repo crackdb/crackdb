@@ -1,12 +1,16 @@
 use crate::{logical_plans::LogicalPlan, optimizer::OptimizerNode, DBResult};
+mod prune_groupings_out_of_aggregators;
 mod resolve_expr_rule;
 mod resolve_literal_types_rule;
 mod resolve_plan_rule;
 
-use crate::optimizer::rules::resolve_expr_rule::ResolveExprRule;
+pub use crate::optimizer::rules::resolve_expr_rule::ResolveExprRule;
 use resolve_plan_rule::ResolvePlanRule;
 
-use self::resolve_literal_types_rule::ResolveLiteralTypesRule;
+use self::{
+    prune_groupings_out_of_aggregators::PruneGroupingsFromAggregatorsRule,
+    resolve_literal_types_rule::ResolveLiteralTypesRule,
+};
 
 /// Optimizer works by applying various rules on tree/graph and transforming the target.
 /// Rule is a interface for all rules.
@@ -19,5 +23,6 @@ pub(crate) fn get_all_rules() -> Vec<Box<dyn Rule<LogicalPlan>>> {
         Box::new(ResolvePlanRule {}),
         Box::new(ResolveExprRule {}),
         Box::new(ResolveLiteralTypesRule {}),
+        Box::new(PruneGroupingsFromAggregatorsRule {}),
     ]
 }

@@ -1,3 +1,7 @@
+use std::fmt::Display;
+
+use crate::{expressions::Literal, DBError, DBResult};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataType {
     UInt8,
@@ -18,22 +22,39 @@ pub enum DataType {
 
 impl DataType {
     pub fn is_integer(&self) -> bool {
+        matches!(
+            self,
+            Self::UInt8
+                | Self::UInt16
+                | Self::UInt32
+                | Self::UInt64
+                | Self::Int8
+                | Self::Int16
+                | Self::Int32
+                | Self::Int64
+        )
+    }
+
+    pub fn zero(&self) -> DBResult<Literal> {
         match self {
-            DataType::UInt8 => true,
-            DataType::UInt16 => true,
-            DataType::UInt32 => true,
-            DataType::UInt64 => true,
-            DataType::Int8 => true,
-            DataType::Int16 => true,
-            DataType::Int32 => true,
-            DataType::Int64 => true,
-            DataType::Float32 => false,
-            DataType::Float64 => false,
-            DataType::String => false,
-            DataType::Boolean => false,
-            DataType::DateTime => false,
-            DataType::Unknown => false,
+            DataType::UInt8 => Ok(Literal::UInt8(0)),
+            DataType::UInt16 => Ok(Literal::UInt16(0)),
+            DataType::UInt32 => Ok(Literal::UInt32(0)),
+            DataType::UInt64 => Ok(Literal::UInt64(0)),
+            DataType::Int8 => Ok(Literal::Int8(0)),
+            DataType::Int16 => Ok(Literal::Int16(0)),
+            DataType::Int32 => Ok(Literal::Int32(0)),
+            DataType::Int64 => Ok(Literal::Int64(0)),
+            DataType::Float32 => Ok(Literal::Float32(0.0)),
+            DataType::Float64 => Ok(Literal::Float64(0.0)),
+            _ => Err(DBError::Unknown(format!("zero not supported for {self}"))),
         }
+    }
+}
+
+impl Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
     }
 }
 

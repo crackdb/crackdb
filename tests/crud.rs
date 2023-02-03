@@ -1,7 +1,10 @@
 use std::vec;
 
 use crackdb::{
-    row::{Cell, Row},
+    data_types::DataType,
+    expressions::Literal,
+    row::Row,
+    tables::{FieldInfo, RelationSchema},
     CrackDB, ResultSet,
 };
 
@@ -16,12 +19,17 @@ fn create_insert_and_query() {
         db.execute("insert into orders values (1, 30, 101)"),
         Ok(ResultSet::empty())
     );
+    let schema = RelationSchema::new(vec![
+        FieldInfo::new("id".to_owned(), DataType::Int32),
+        FieldInfo::new("amount".to_owned(), DataType::Int32),
+        FieldInfo::new("userId".to_owned(), DataType::Int32),
+    ]);
     let expected_results = ResultSet::new(
-        vec!["id".to_owned(), "amount".to_owned(), "userId".to_owned()],
+        schema,
         vec![Row::new(vec![
-            Cell::Int32(1),
-            Cell::Int32(30),
-            Cell::Int32(101),
+            Literal::Int32(1),
+            Literal::Int32(30),
+            Literal::Int32(101),
         ])],
     );
     assert_eq!(
@@ -41,18 +49,19 @@ fn create_insert_and_query_with_more_data_types_and_expressions() {
         db.execute("insert into orders values (1, 30.0, '101', '2023-01-22 15:04:00')"),
         Ok(ResultSet::empty())
     );
+    let schema = RelationSchema::new(vec![
+        FieldInfo::new("id".to_owned(), DataType::Int32),
+        FieldInfo::new("amount".to_owned(), DataType::Float64),
+        FieldInfo::new("userId".to_owned(), DataType::String),
+        FieldInfo::new("dateTime".to_owned(), DataType::DateTime),
+    ]);
     let expected_results = ResultSet::new(
-        vec![
-            "id".to_owned(),
-            "amount".to_owned(),
-            "userId".to_owned(),
-            "dateTime".to_owned(),
-        ],
+        schema,
         vec![Row::new(vec![
-            Cell::Int32(1),
-            Cell::Float64(30.0),
-            Cell::String("101".to_string()),
-            Cell::DateTime("2023-01-22 15:04:00".to_string()),
+            Literal::Int32(1),
+            Literal::Float64(30.0),
+            Literal::String("101".to_string()),
+            Literal::DateTime("2023-01-22 15:04:00".to_string()),
         ])],
     );
     assert_eq!(
@@ -75,18 +84,20 @@ fn create_insert_and_query_with_more_expressions() {
         db.execute("insert into orders values (2, 60.0, '102', '2023-01-24 21:07:00')"),
         Ok(ResultSet::empty())
     );
+    let schema = RelationSchema::new(vec![
+        FieldInfo::new("id".to_owned(), DataType::Int32),
+        FieldInfo::new("amount".to_owned(), DataType::Float64),
+        FieldInfo::new("userId".to_owned(), DataType::String),
+        FieldInfo::new("dateTime".to_owned(), DataType::DateTime),
+    ]);
+
     let expected_results = ResultSet::new(
-        vec![
-            "id".to_owned(),
-            "amount".to_owned(),
-            "userId".to_owned(),
-            "dateTime".to_owned(),
-        ],
+        schema,
         vec![Row::new(vec![
-            Cell::Int32(1),
-            Cell::Float64(30.0),
-            Cell::String("101".to_string()),
-            Cell::DateTime("2023-01-22 15:04:00".to_string()),
+            Literal::Int32(1),
+            Literal::Float64(30.0),
+            Literal::String("101".to_string()),
+            Literal::DateTime("2023-01-22 15:04:00".to_string()),
         ])],
     );
     assert_eq!(
@@ -105,12 +116,17 @@ fn supports_projection_query() {
         db.execute("insert into orders values (1, 30.0, '101', '2023-01-22 15:04:00')"),
         Ok(ResultSet::empty())
     );
+    let schema = RelationSchema::new(vec![
+        FieldInfo::new("id".to_owned(), DataType::Int32),
+        FieldInfo::new("amount".to_owned(), DataType::Float64),
+        FieldInfo::new("userId".to_owned(), DataType::String),
+    ]);
     let expected_results = ResultSet::new(
-        vec!["id".to_owned(), "amount".to_owned(), "userId".to_owned()],
+        schema,
         vec![Row::new(vec![
-            Cell::Int32(1),
-            Cell::Float64(45.0),
-            Cell::String("101".to_string()),
+            Literal::Int32(1),
+            Literal::Float64(45.0),
+            Literal::String("101".to_string()),
         ])],
     );
     assert_eq!(

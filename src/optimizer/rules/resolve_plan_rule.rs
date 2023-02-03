@@ -38,10 +38,8 @@ impl ResolvePlanRule {
             }
             LogicalPlan::Filter { .. } => Ok(None),
             LogicalPlan::Scan { .. } => Ok(None),
-            LogicalPlan::Projection {
-                expressions: _,
-                child: _,
-            } => Ok(None),
+            LogicalPlan::Projection { .. } => Ok(None),
+            LogicalPlan::Aggregator { .. } => Ok(None),
         }
     }
 }

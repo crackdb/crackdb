@@ -1,16 +1,16 @@
 use std::sync::{Arc, RwLock};
 
 use sqlparser::ast::{
-    BinaryOperator, Expr, SelectItem, SetExpr, Statement, TableFactor, UnaryOperator,
-    Value,
+    BinaryOperator, Expr, Function, FunctionArgExpr, SelectItem, SetExpr, Statement,
+    TableFactor, UnaryOperator, Value,
 };
 
 use crate::{
     expressions::{BinaryOp, Expression, Literal, UnaryOp},
     logical_plans::LogicalPlan,
     optimizer::Optimizer,
-    physical_plans::Projection,
     physical_plans::{Filter, InMemTableScan, PhysicalPlan},
+    physical_plans::{HashAggregator, Projection},
     Catalog, DBError, DBResult, ResultSet,
 };
 
@@ -37,7 +37,7 @@ impl SelectHandler {
     fn process_query(&self, query: sqlparser::ast::Query) -> DBResult<ResultSet> {
         // generate logical plan
         let logical_plan = build_logical_plan(query)?;
-        // print!("logical plan: {:?}", logical_plan);
+        // println!("logical plan: {:?}", logical_plan);
 
         // TODO: optimize logical plan before further planning
         let optimizer = Optimizer::new(Arc::clone(&self.catalog));
@@ -81,6 +81,18 @@ impl SelectHandler {
                 let child_plan = self.planning(*child)?;
                 Ok(Box::new(Projection::new(expressions, child_plan)))
             }
+            LogicalPlan::Aggregator {
+                aggregators,
+                groupings,
+                child,
+            } => {
+                let child_plan = self.planning(*child)?;
+                Ok(Box::new(HashAggregator::new(
+                    aggregators,
+                    groupings,
+                    child_plan,
+                )))
+            }
         }
     }
 }
@@ -89,7 +101,6 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
     let logical_plan = match *query.body {
         SetExpr::Select(box_select) => {
             let select = *box_select;
-            let projections = select.projection;
 
             // FIXME: support select from multiple tables
             let table_with_join = select.from.first().unwrap();
@@ -115,18 +126,35 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
                 scan
             };
 
-            if is_projection_empty(&projections) {
-                filter
-            } else {
-                let mut projection_exprs = Vec::new();
-                for ele in projections {
-                    let projection = ast_projection_to_plan_expr(ele)?;
-                    projection_exprs.push(projection);
+            // create Aggregate or Projection when necessary
+            let projections = select.projection;
+            if !select.group_by.is_empty() {
+                let groupings = select
+                    .group_by
+                    .iter()
+                    .map(ast_expr_to_plan_expr)
+                    .collect::<DBResult<Vec<_>>>()?;
+                let aggregators = projections
+                    .into_iter()
+                    .map(ast_projection_to_plan_expr)
+                    .collect::<DBResult<Vec<_>>>()?;
+                LogicalPlan::Aggregator {
+                    aggregators,
+                    groupings,
+                    child: Box::new(filter),
                 }
+            } else if !is_projection_empty(&projections) {
+                let projection_exprs = projections
+                    .into_iter()
+                    .map(ast_projection_to_plan_expr)
+                    .collect::<DBResult<Vec<_>>>()?;
+
                 LogicalPlan::Projection {
                     expressions: projection_exprs,
                     child: Box::new(filter),
                 }
+            } else {
+                filter
             }
         }
         _ => {
@@ -355,7 +383,23 @@ fn ast_expr_to_plan_expr(expr: &Expr) -> DBResult<Expression> {
             value: _,
         } => todo!(),
         Expr::MapAccess { column: _, keys: _ } => todo!(),
-        Expr::Function(_) => todo!(),
+        Expr::Function(Function { name, args, .. }) => {
+            let arg_exprs = args
+                .iter()
+                .map(|arg| match arg {
+                    sqlparser::ast::FunctionArg::Named { arg, .. } => {
+                        ast_function_arg_expr_to_plan_expr(arg)
+                    }
+                    sqlparser::ast::FunctionArg::Unnamed(arg) => {
+                        ast_function_arg_expr_to_plan_expr(arg)
+                    }
+                })
+                .collect::<DBResult<Vec<_>>>()?;
+            Ok(Expression::Function {
+                name: name.to_string(),
+                args: arg_exprs,
+            })
+        }
         Expr::AggregateExpressionWithFilter { expr: _, filter: _ } => todo!(),
         Expr::Case {
             operand: _,
@@ -389,5 +433,13 @@ fn ast_expr_to_plan_expr(expr: &Expr) -> DBResult<Expression> {
             match_value: _,
             opt_search_modifier: _,
         } => todo!(),
+    }
+}
+
+fn ast_function_arg_expr_to_plan_expr(arg: &FunctionArgExpr) -> DBResult<Expression> {
+    match arg {
+        FunctionArgExpr::Expr(expr) => ast_expr_to_plan_expr(expr),
+        FunctionArgExpr::QualifiedWildcard(_) => todo!(),
+        FunctionArgExpr::Wildcard => todo!(),
     }
 }

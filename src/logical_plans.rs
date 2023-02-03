@@ -21,6 +21,11 @@ pub enum LogicalPlan {
         expressions: Vec<Expression>,
         child: Box<LogicalPlan>,
     },
+    Aggregator {
+        aggregators: Vec<Expression>,
+        groupings: Vec<Expression>,
+        child: Box<LogicalPlan>,
+    },
 }
 
 impl OptimizerNode for LogicalPlan {
@@ -44,6 +49,19 @@ impl LogicalPlan {
             } => {
                 let fields = expressions
                     .iter()
+                    .map(|expr| FieldInfo::new(expr.to_string(), expr.data_type()))
+                    .collect();
+                let schema = RelationSchema::new(fields);
+                Ok(schema)
+            }
+            LogicalPlan::Aggregator {
+                aggregators,
+                groupings,
+                ..
+            } => {
+                let fields = aggregators
+                    .iter()
+                    .chain(groupings.iter())
                     .map(|expr| FieldInfo::new(expr.to_string(), expr.data_type()))
                     .collect();
                 let schema = RelationSchema::new(fields);
@@ -81,6 +99,20 @@ impl LogicalPlan {
                         child: Box::new(updated_child),
                     },
                 ),
+            LogicalPlan::Aggregator {
+                child,
+                aggregators,
+                groupings,
+            } => self.transform_bottom_up_for_single_child_plan(
+                child,
+                context,
+                func,
+                |updated_child| LogicalPlan::Aggregator {
+                    aggregators: aggregators.clone(),
+                    groupings: groupings.clone(),
+                    child: Box::new(updated_child),
+                },
+            ),
         }
     }
 
@@ -136,6 +168,31 @@ impl LogicalPlan {
                         child: Box::new(child),
                     },
                 ),
+            LogicalPlan::Aggregator {
+                aggregators,
+                groupings,
+                child,
+            } => {
+                let expressions = aggregators
+                    .iter()
+                    .chain(groupings.iter())
+                    .cloned()
+                    .collect();
+                self.transform_exprs_for_single_child_plan(
+                    &expressions,
+                    child,
+                    rule,
+                    context,
+                    |mut expressions, child| {
+                        let new_groupings = expressions.split_off(aggregators.len());
+                        LogicalPlan::Aggregator {
+                            aggregators: expressions,
+                            groupings: new_groupings,
+                            child: Box::new(child),
+                        }
+                    },
+                )
+            }
         }
     }
 

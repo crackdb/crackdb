@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::hash::Hash;
 
 use crate::data_types::DataType;
 use crate::optimizer::{OptimizerContextForExpr, OptimizerNode};
@@ -27,6 +28,10 @@ pub enum Expression {
         op: UnaryOp,
         input: Box<Expression>,
     },
+    Function {
+        name: String,
+        args: Vec<Expression>,
+    },
 }
 
 impl Display for Expression {
@@ -40,6 +45,14 @@ impl Display for Expression {
                 write!(f, "{left}_{op}_{right}")
             }
             Expression::UnaryOp { op, input } => write!(f, "{op}_{input}"),
+            Expression::Function { name, args } => write!(
+                f,
+                "{name}({})",
+                args.iter()
+                    .map(|e| { e.to_string() })
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         }
     }
 }
@@ -123,6 +136,22 @@ impl Expression {
             },
             Expression::UnaryOp { input, .. } => input.data_type(),
             Expression::Alias { alias: _, child } => child.data_type(),
+            // TODO: implement this
+            Expression::Function { name: _, args: _ } => DataType::Float64,
+        }
+    }
+
+    pub fn is_aggregation(&self) -> bool {
+        match self {
+            Expression::Function { name, .. } => {
+                ["sum", "avg"].contains(&name.to_lowercase().as_str())
+            }
+            Expression::Alias { child, .. } => child.is_aggregation(),
+            Expression::BinaryOp { op: _, left, right } => {
+                left.is_aggregation() || right.is_aggregation()
+            }
+            Expression::UnaryOp { op: _, input } => input.is_aggregation(),
+            _ => false,
         }
     }
 
@@ -136,76 +165,73 @@ impl Expression {
             Expression::UnResolvedFieldRef(_) => func(self, context),
             Expression::FieldRef { .. } => func(self, context),
             Expression::BinaryOp { op, left, right } => {
-                match (
-                    left.transform_bottom_up(context, func)?,
-                    right.transform_bottom_up(context, func)?,
-                ) {
-                    (None, None) => func(self, context),
-                    (None, Some(right)) => {
-                        let updated = Expression::BinaryOp {
-                            op: op.clone(),
-                            left: left.clone(),
-                            right: Box::new(right),
-                        };
-                        match func(&updated, context)? {
-                            None => Ok(Some(updated)),
-                            Some(updated) => Ok(Some(updated)),
-                        }
+                let children = vec![left.as_ref().clone(), right.as_ref().clone()];
+                self.transform_bottom_up_helper(&children, context, func, |children| {
+                    let mut iter = children.into_iter();
+                    Expression::BinaryOp {
+                        op: op.clone(),
+                        left: Box::new(iter.next().unwrap()),
+                        right: Box::new(iter.next().unwrap()),
                     }
-                    (Some(left), None) => {
-                        let updated = Expression::BinaryOp {
-                            op: op.clone(),
-                            left: Box::new(left),
-                            right: right.clone(),
-                        };
-                        match func(&updated, context)? {
-                            None => Ok(Some(updated)),
-                            Some(updated) => Ok(Some(updated)),
-                        }
-                    }
-                    (Some(left), Some(right)) => {
-                        let updated = Expression::BinaryOp {
-                            op: op.clone(),
-                            left: Box::new(left),
-                            right: Box::new(right),
-                        };
-                        match func(&updated, context)? {
-                            None => Ok(Some(updated)),
-                            Some(updated) => Ok(Some(updated)),
-                        }
-                    }
-                }
+                })
             }
             Expression::UnaryOp { op, input } => {
-                match input.transform_bottom_up(context, func)? {
-                    Some(updated_input) => {
-                        let updated = Expression::UnaryOp {
-                            op: op.clone(),
-                            input: Box::new(updated_input),
-                        };
-                        match func(&updated, context)? {
-                            Some(updated) => Ok(Some(updated)),
-                            None => Ok(Some(updated)),
-                        }
+                let children = vec![input.as_ref().clone()];
+                self.transform_bottom_up_helper(&children, context, func, |children| {
+                    let mut iter = children.into_iter();
+                    Expression::UnaryOp {
+                        op: op.clone(),
+                        input: Box::new(iter.next().unwrap()),
                     }
-                    None => func(self, context),
-                }
+                })
             }
             Expression::Alias { alias, child } => {
-                match child.transform_bottom_up(context, func)? {
-                    Some(updated_child) => {
-                        let updated = Expression::Alias {
-                            alias: alias.clone(),
-                            child: Box::new(updated_child),
-                        };
-                        match func(&updated, context)? {
-                            Some(updated) => Ok(Some(updated)),
-                            None => Ok(Some(updated)),
-                        }
+                let children = vec![child.as_ref().clone()];
+                self.transform_bottom_up_helper(&children, context, func, |children| {
+                    let mut iter = children.into_iter();
+                    Expression::Alias {
+                        alias: alias.clone(),
+                        child: Box::new(iter.next().unwrap()),
                     }
-                    None => func(self, context),
-                }
+                })
             }
+            Expression::Function { name, args } => {
+                self.transform_bottom_up_helper(args, context, func, |children| {
+                    Expression::Function {
+                        name: name.clone(),
+                        args: children,
+                    }
+                })
+            }
+        }
+    }
+
+    fn transform_bottom_up_helper(
+        &self,
+        children: &Vec<Expression>,
+        context: &OptimizerContextForExpr,
+        func: fn(&Expression, &OptimizerContextForExpr) -> DBResult<Option<Expression>>,
+        builder: impl FnOnce(Vec<Expression>) -> Expression,
+    ) -> DBResult<Option<Expression>> {
+        let mut any_children_updated = false;
+        let mut updated_children = Vec::new();
+        for child in children {
+            if let Some(updated) = child.transform_bottom_up(context, func)? {
+                any_children_updated = true;
+                updated_children.push(updated);
+            } else {
+                updated_children.push(child.clone());
+            }
+        }
+
+        if any_children_updated {
+            let updated_self = builder(updated_children);
+            match func(&updated_self, context)? {
+                Some(updated_self) => Ok(Some(updated_self)),
+                None => Ok(Some(updated_self)),
+            }
+        } else {
+            func(self, context)
         }
     }
 }
@@ -228,6 +254,42 @@ pub enum Literal {
     String(String),
     DateTime(String),
     Null,
+}
+
+impl PartialEq for Literal {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::UnResolvedNumber(l0), Self::UnResolvedNumber(r0)) => l0 == r0,
+            (Self::UnResolvedString(l0), Self::UnResolvedString(r0)) => l0 == r0,
+            (Self::UInt8(l0), Self::UInt8(r0)) => l0 == r0,
+            (Self::UInt16(l0), Self::UInt16(r0)) => l0 == r0,
+            (Self::UInt32(l0), Self::UInt32(r0)) => l0 == r0,
+            (Self::UInt64(l0), Self::UInt64(r0)) => l0 == r0,
+            (Self::Int8(l0), Self::Int8(r0)) => l0 == r0,
+            (Self::Int16(l0), Self::Int16(r0)) => l0 == r0,
+            (Self::Int32(l0), Self::Int32(r0)) => l0 == r0,
+            (Self::Int64(l0), Self::Int64(r0)) => l0 == r0,
+            (Self::Float32(l0), Self::Float32(r0)) => l0 == r0,
+            (Self::Float64(l0), Self::Float64(r0)) => l0 == r0,
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            (Self::DateTime(l0), Self::DateTime(r0)) => l0 == r0,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+/// this is hack for using Literal as HashMap key
+/// FIXME: deal with NaN
+impl Eq for Literal {
+    fn assert_receiver_is_total_eq(&self) {}
+}
+
+/// TODO: revisit this to make sure floats are safe for hashing
+impl Hash for Literal {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+    }
 }
 
 impl Display for Literal {

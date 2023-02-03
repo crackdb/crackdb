@@ -3,9 +3,8 @@ use std::sync::{Arc, RwLock};
 use sqlparser::ast::{Expr, SetExpr, Statement, Value, Values};
 
 use crate::{
-    data_types::DataType,
-    row::{Cell, Row},
-    Catalog, DBError, DBResult, ResultSet,
+    data_types::DataType, expressions::Literal, row::Row, Catalog, DBError, DBResult,
+    ResultSet,
 };
 
 use super::QueryHandler;
@@ -94,7 +93,7 @@ impl InsertHandler {
                                     convert_insert_expr_to_cell_value(expr, data_type)?;
                                 cells.push(cell);
                             }
-                            None => cells.push(Cell::Null),
+                            None => cells.push(Literal::Null),
                         }
                     }
                     let row = Row::new(cells);
@@ -121,28 +120,28 @@ impl InsertHandler {
 fn convert_insert_expr_to_cell_value(
     expr: &Expr,
     data_type: &DataType,
-) -> DBResult<Cell> {
+) -> DBResult<Literal> {
     match expr {
         Expr::Value(value) => match value {
             Value::Number(v, _) => match data_type {
-                DataType::UInt8 => Ok(v.parse::<u8>().map(Cell::UInt8)?),
-                DataType::UInt16 => Ok(v.parse::<u16>().map(Cell::UInt16)?),
-                DataType::UInt32 => Ok(v.parse::<u32>().map(Cell::UInt32)?),
-                DataType::UInt64 => Ok(v.parse::<u64>().map(Cell::UInt64)?),
-                DataType::Int8 => Ok(v.parse::<i8>().map(Cell::Int8)?),
-                DataType::Int16 => Ok(v.parse::<i16>().map(Cell::Int16)?),
-                DataType::Int32 => Ok(v.parse::<i32>().map(Cell::Int32)?),
-                DataType::Int64 => Ok(v.parse::<i64>().map(Cell::Int64)?),
-                DataType::Float32 => Ok(v.parse::<f32>().map(Cell::Float32)?),
-                DataType::Float64 => Ok(v.parse::<f64>().map(Cell::Float64)?),
+                DataType::UInt8 => Ok(v.parse::<u8>().map(Literal::UInt8)?),
+                DataType::UInt16 => Ok(v.parse::<u16>().map(Literal::UInt16)?),
+                DataType::UInt32 => Ok(v.parse::<u32>().map(Literal::UInt32)?),
+                DataType::UInt64 => Ok(v.parse::<u64>().map(Literal::UInt64)?),
+                DataType::Int8 => Ok(v.parse::<i8>().map(Literal::Int8)?),
+                DataType::Int16 => Ok(v.parse::<i16>().map(Literal::Int16)?),
+                DataType::Int32 => Ok(v.parse::<i32>().map(Literal::Int32)?),
+                DataType::Int64 => Ok(v.parse::<i64>().map(Literal::Int64)?),
+                DataType::Float32 => Ok(v.parse::<f32>().map(Literal::Float32)?),
+                DataType::Float64 => Ok(v.parse::<f64>().map(Literal::Float64)?),
                 _ => Err(DBError::ParserError(
                     "Unsupported number data type.".to_string(),
                 )),
             },
             Value::SingleQuotedString(v) => match data_type {
-                DataType::String => Ok(Cell::String(v.to_string())),
+                DataType::String => Ok(Literal::String(v.to_string())),
                 // TODO: validate format
-                DataType::DateTime => Ok(Cell::DateTime(v.to_string())),
+                DataType::DateTime => Ok(Literal::DateTime(v.to_string())),
                 _ => Err(DBError::ParserError("Unexpected string.".to_string())),
             },
             Value::DollarQuotedString(_) => {
@@ -158,14 +157,14 @@ fn convert_insert_expr_to_cell_value(
                 Err(DBError::ParserError("Unexpected hex string.".to_string()))
             }
             Value::DoubleQuotedString(v) => match data_type {
-                DataType::String => Ok(Cell::String(v.to_string())),
+                DataType::String => Ok(Literal::String(v.to_string())),
                 _ => Err(DBError::ParserError("Unexpected string.".to_string())),
             },
             Value::Boolean(v) => match data_type {
-                DataType::Boolean => Ok(Cell::Boolean(*v)),
+                DataType::Boolean => Ok(Literal::Bool(*v)),
                 _ => Err(DBError::ParserError("Unexpected boolean.".to_string())),
             },
-            Value::Null => Ok(Cell::Null),
+            Value::Null => Ok(Literal::Null),
             Value::Placeholder(_) => {
                 Err(DBError::ParserError("Unexpected placeholder".to_string()))
             }

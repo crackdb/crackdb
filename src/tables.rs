@@ -3,7 +3,7 @@ use crate::row::Row;
 
 pub struct InMemTable {
     meta: TableMeta,
-    data: Vec<Row>,
+    data: Vec<Row<'static>>,
 }
 
 impl InMemTable {
@@ -14,12 +14,12 @@ impl InMemTable {
         }
     }
 
-    pub fn insert_data(&mut self, data: Vec<Row>) {
+    pub fn insert_data(&mut self, data: Vec<Row<'static>>) {
         self.data.extend(data)
     }
 
     // FIXME: avoid copy data for reading purpose
-    pub fn read(&self) -> Vec<Row> {
+    pub fn read(&self) -> Vec<Row<'static>> {
         self.data.to_vec()
     }
 
@@ -51,7 +51,7 @@ impl TableMeta {
         &self.schema
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RelationSchema {
     fields: Vec<FieldInfo>,
 }
@@ -66,7 +66,7 @@ impl RelationSchema {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldInfo {
     name: String,
     data_type: DataType,

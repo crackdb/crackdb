@@ -1,7 +1,8 @@
 use crate::{
     expressions::Expression,
     interpreter::Interpreter,
-    row::{convert_expr_literal_to_cell, Row},
+    row::Row,
+    tables::{FieldInfo, RelationSchema},
 };
 
 use super::PhysicalPlan;
@@ -22,13 +23,12 @@ impl PhysicalPlan for Projection {
         self.child.setup()
     }
 
-    fn next(&mut self) -> crate::DBResult<Option<crate::row::Row>> {
+    fn next(&mut self) -> crate::DBResult<Option<Row<'static>>> {
         if let Some(row) = self.child.next()? {
             let mut cells = Vec::new();
             for projection in &self.projections {
                 let literal = Interpreter::eval(projection, &row)?;
-                let cell = convert_expr_literal_to_cell(&literal);
-                cells.push(cell);
+                cells.push(literal);
             }
             let row = Row::new(cells);
             Ok(Some(row))
@@ -37,7 +37,13 @@ impl PhysicalPlan for Projection {
         }
     }
 
-    fn schema(&self) -> crate::DBResult<Vec<String>> {
-        Ok(self.projections.iter().map(|p| p.to_string()).collect())
+    fn schema(&self) -> crate::DBResult<RelationSchema> {
+        let fields = self
+            .projections
+            .iter()
+            .map(|f| FieldInfo::new(f.to_string(), f.data_type()))
+            .collect();
+        let schema = RelationSchema::new(fields);
+        Ok(schema)
     }
 }
