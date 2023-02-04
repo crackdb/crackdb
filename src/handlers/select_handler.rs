@@ -395,7 +395,7 @@ fn ast_expr_to_plan_expr(expr: &Expr) -> DBResult<Expression> {
                     }
                 })
                 .collect::<DBResult<Vec<_>>>()?;
-            Ok(Expression::Function {
+            Ok(Expression::UnResolvedFunction {
                 name: name.to_string(),
                 args: arg_exprs,
             })

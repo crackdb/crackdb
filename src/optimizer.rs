@@ -1,6 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use crate::{
+    functions::FunctionsRegistry,
     logical_plans::LogicalPlan,
     tables::{InMemTable, RelationSchema},
     Catalog, DBError, DBResult,
@@ -18,6 +19,7 @@ pub trait OptimizerNode {
 #[derive(Debug)]
 pub struct OptimizerContextForExpr {
     schema: RelationSchema,
+    functions_registry: FunctionsRegistry,
 }
 
 pub struct OptimizerContext {
@@ -36,11 +38,19 @@ impl OptimizerContext {
 
 impl OptimizerContextForExpr {
     pub fn new(schema: RelationSchema) -> Self {
-        OptimizerContextForExpr { schema }
+        // TODO: use a global functions registry
+        OptimizerContextForExpr {
+            schema,
+            functions_registry: FunctionsRegistry::new(),
+        }
     }
 
     pub fn schema(&self) -> &RelationSchema {
         &self.schema
+    }
+
+    pub fn functions_registry(&self) -> &FunctionsRegistry {
+        &self.functions_registry
     }
 }
 

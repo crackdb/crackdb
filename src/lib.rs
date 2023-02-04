@@ -2,6 +2,7 @@ mod aggregators;
 pub mod catalog;
 mod errors;
 pub mod expressions;
+mod functions;
 pub mod handlers;
 pub mod interpreter;
 pub mod logical_plans;

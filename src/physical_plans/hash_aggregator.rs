@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    aggregators::{Aggregator, AvgAgg, SumAgg},
+    aggregators::Aggregator,
     expressions::{Expression, Literal},
     interpreter::Interpreter,
     row::Row,
@@ -42,24 +42,7 @@ impl HashAggregator {
         self.aggregator_exprs
             .iter()
             .map(|agg_expr| match agg_expr {
-                Expression::Function { name, args } => match name.to_lowercase().as_str()
-                {
-                    "sum" => {
-                        if args.len() == 1 {
-                            Ok(Box::new(SumAgg::new(&args[0])?) as Box<dyn Aggregator>)
-                        } else {
-                            Err(DBError::Unknown("invalid args for sum agg".to_string()))
-                        }
-                    }
-                    "avg" => {
-                        if args.len() == 1 {
-                            Ok(Box::new(AvgAgg::new(&args[0])?) as Box<dyn Aggregator>)
-                        } else {
-                            Err(DBError::Unknown("invalid args for avg agg".to_string()))
-                        }
-                    }
-                    _ => Err(DBError::Unknown(format!("unsupported agg: {name}"))),
-                },
+                Expression::Function(func) => func.as_ref().aggregator(),
                 _ => Err(DBError::Unknown(format!("unsupported agg: {agg_expr}"))),
             })
             .collect::<DBResult<Vec<_>>>()

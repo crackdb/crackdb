@@ -45,7 +45,10 @@ impl Interpreter {
                 UnaryOp::Neg => negative_impl(Self::eval(input, row)?),
             },
             Expression::Alias { alias: _, child } => Self::eval(child, row),
-            Expression::Function { .. } => todo!(),
+            Expression::UnResolvedFunction { .. } => Err(DBError::InterpretingError(
+                "Trying evaluate an unresolved function".to_string(),
+            )),
+            Expression::Function(_) => todo!(),
         }
     }
 }

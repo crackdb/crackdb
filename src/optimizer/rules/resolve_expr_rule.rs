@@ -62,7 +62,8 @@ impl ResolveExprRule {
             Expression::BinaryOp { .. } => Ok(None),
             Expression::UnaryOp { .. } => Ok(None),
             Expression::Alias { .. } => Ok(None),
-            Expression::Function { .. } => Ok(None),
+            Expression::Function(_) => Ok(None),
+            Expression::UnResolvedFunction { .. } => Ok(None),
         }
     }
 }

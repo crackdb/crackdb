@@ -1,7 +1,9 @@
 use std::fmt::Display;
 use std::hash::Hash;
+use std::rc::Rc;
 
 use crate::data_types::DataType;
+use crate::functions::Function;
 use crate::optimizer::{OptimizerContextForExpr, OptimizerNode};
 use crate::DBError;
 use crate::DBResult;
@@ -28,10 +30,12 @@ pub enum Expression {
         op: UnaryOp,
         input: Box<Expression>,
     },
-    Function {
+    UnResolvedFunction {
         name: String,
         args: Vec<Expression>,
     },
+    // TODO: revisit the usage of Rc here
+    Function(Rc<dyn Function>),
 }
 
 impl Display for Expression {
@@ -45,7 +49,7 @@ impl Display for Expression {
                 write!(f, "{left}_{op}_{right}")
             }
             Expression::UnaryOp { op, input } => write!(f, "{op}_{input}"),
-            Expression::Function { name, args } => write!(
+            Expression::UnResolvedFunction { name, args } => write!(
                 f,
                 "{name}({})",
                 args.iter()
@@ -53,6 +57,7 @@ impl Display for Expression {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
+            Expression::Function(func) => func.as_ref().to_expr_string().fmt(f),
         }
     }
 }
@@ -137,14 +142,17 @@ impl Expression {
             Expression::UnaryOp { input, .. } => input.data_type(),
             Expression::Alias { alias: _, child } => child.data_type(),
             // TODO: implement this
-            Expression::Function { name: _, args: _ } => DataType::Float64,
+            Expression::UnResolvedFunction { name: _, args: _ } => DataType::Unknown,
+            Expression::Function(func) => func.as_ref().data_type(),
         }
     }
 
     pub fn is_aggregation(&self) -> bool {
         match self {
-            Expression::Function { name, .. } => {
-                ["sum", "avg"].contains(&name.to_lowercase().as_str())
+            Expression::Function(func) => func.is_aggregator(),
+            Expression::UnResolvedFunction { .. } => {
+                // TODO: this should never happen
+                false
             }
             Expression::Alias { child, .. } => child.is_aggregation(),
             Expression::BinaryOp { op: _, left, right } => {
@@ -195,14 +203,14 @@ impl Expression {
                     }
                 })
             }
-            Expression::Function { name, args } => {
-                self.transform_bottom_up_helper(args, context, func, |children| {
-                    Expression::Function {
+            Expression::UnResolvedFunction { name, args } => self
+                .transform_bottom_up_helper(args, context, func, |children| {
+                    Expression::UnResolvedFunction {
                         name: name.clone(),
                         args: children,
                     }
-                })
-            }
+                }),
+            Expression::Function(_) => func(self, context),
         }
     }
 
