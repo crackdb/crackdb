@@ -147,27 +147,14 @@ impl Expression {
         }
     }
 
-    pub fn is_aggregation(&self) -> bool {
-        match self {
-            Expression::Function(func) => func.is_aggregator(),
-            Expression::UnResolvedFunction { .. } => {
-                // TODO: this should never happen
-                false
-            }
-            Expression::Alias { child, .. } => child.is_aggregation(),
-            Expression::BinaryOp { op: _, left, right } => {
-                left.is_aggregation() || right.is_aggregation()
-            }
-            Expression::UnaryOp { op: _, input } => input.is_aggregation(),
-            _ => false,
-        }
-    }
-
-    pub fn transform_bottom_up(
+    pub fn transform_bottom_up<T>(
         &self,
         context: &OptimizerContextForExpr,
-        func: fn(&Expression, &OptimizerContextForExpr) -> DBResult<Option<Expression>>,
-    ) -> DBResult<Option<Expression>> {
+        func: &mut T,
+    ) -> DBResult<Option<Expression>>
+    where
+        T: FnMut(&Expression, &OptimizerContextForExpr) -> DBResult<Option<Expression>>,
+    {
         match self {
             Expression::Literal(_) => func(self, context),
             Expression::UnResolvedFieldRef(_) => func(self, context),
@@ -176,51 +163,61 @@ impl Expression {
                 let children = vec![left.as_ref().clone(), right.as_ref().clone()];
                 self.transform_bottom_up_helper(&children, context, func, |children| {
                     let mut iter = children.into_iter();
-                    Expression::BinaryOp {
+                    Ok(Expression::BinaryOp {
                         op: op.clone(),
                         left: Box::new(iter.next().unwrap()),
                         right: Box::new(iter.next().unwrap()),
-                    }
+                    })
                 })
             }
             Expression::UnaryOp { op, input } => {
                 let children = vec![input.as_ref().clone()];
                 self.transform_bottom_up_helper(&children, context, func, |children| {
                     let mut iter = children.into_iter();
-                    Expression::UnaryOp {
+                    Ok(Expression::UnaryOp {
                         op: op.clone(),
                         input: Box::new(iter.next().unwrap()),
-                    }
+                    })
                 })
             }
             Expression::Alias { alias, child } => {
                 let children = vec![child.as_ref().clone()];
                 self.transform_bottom_up_helper(&children, context, func, |children| {
                     let mut iter = children.into_iter();
-                    Expression::Alias {
+                    Ok(Expression::Alias {
                         alias: alias.clone(),
                         child: Box::new(iter.next().unwrap()),
-                    }
+                    })
                 })
             }
             Expression::UnResolvedFunction { name, args } => self
                 .transform_bottom_up_helper(args, context, func, |children| {
-                    Expression::UnResolvedFunction {
+                    Ok(Expression::UnResolvedFunction {
                         name: name.clone(),
                         args: children,
-                    }
+                    })
                 }),
-            Expression::Function(_) => func(self, context),
+            Expression::Function(f) => {
+                // TODO: get rid of this clone
+                let args = f.args().into_iter().cloned().collect();
+                self.transform_bottom_up_helper(&args, context, func, |args| {
+                    f.with_args(args).map(Expression::Function)
+                })
+            }
         }
     }
 
-    fn transform_bottom_up_helper(
+    fn transform_bottom_up_helper<T, B>(
         &self,
         children: &Vec<Expression>,
         context: &OptimizerContextForExpr,
-        func: fn(&Expression, &OptimizerContextForExpr) -> DBResult<Option<Expression>>,
-        builder: impl FnOnce(Vec<Expression>) -> Expression,
-    ) -> DBResult<Option<Expression>> {
+        func: &mut T,
+        builder: B,
+    ) -> DBResult<Option<Expression>>
+    where
+        T: FnMut(&Expression, &OptimizerContextForExpr) -> DBResult<Option<Expression>>,
+        B: Fn(Vec<Expression>) -> DBResult<Expression>,
+    {
         let mut any_children_updated = false;
         let mut updated_children = Vec::new();
         for child in children {
@@ -233,7 +230,7 @@ impl Expression {
         }
 
         if any_children_updated {
-            let updated_self = builder(updated_children);
+            let updated_self = builder(updated_children)?;
             match func(&updated_self, context)? {
                 Some(updated_self) => Ok(Some(updated_self)),
                 None => Ok(Some(updated_self)),

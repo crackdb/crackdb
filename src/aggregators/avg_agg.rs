@@ -59,13 +59,13 @@ impl Aggregator for AvgAgg {
         let context = OptimizerContextForExpr::new(schema);
         let new_sum_expr = self
             .sum_expr
-            .transform_bottom_up(&context, ResolveExprRule::resolve_expression)?
+            .transform_bottom_up(&context, &mut ResolveExprRule::resolve_expression)?
             .ok_or(DBError::InterpretingError(
                 "Cannot resolve avg agg expr".to_string(),
             ))?;
         let new_count_expr = self
             .count_expr
-            .transform_bottom_up(&context, ResolveExprRule::resolve_expression)?
+            .transform_bottom_up(&context, &mut ResolveExprRule::resolve_expression)?
             .ok_or(DBError::InterpretingError(
                 "Cannot resolve avg agg expr".to_string(),
             ))?;

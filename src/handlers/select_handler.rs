@@ -43,7 +43,7 @@ impl SelectHandler {
         let optimizer = Optimizer::new(Arc::clone(&self.catalog));
         let optimized_logical_plan = optimizer.optimize(logical_plan)?;
 
-        // println!("optimized logical plan: {:?}", optimized_logical_plan);
+        // println!("optimized logical plan: {optimized_logical_plan:?}");
 
         // transform to physical plan by planning it
         let mut physical_plan = self.planning(optimized_logical_plan)?;
@@ -102,9 +102,10 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
         SetExpr::Select(box_select) => {
             let select = *box_select;
 
+            // create Scan node
             // FIXME: support select from multiple tables
             let table_with_join = select.from.first().unwrap();
-            let scan = match &table_with_join.relation {
+            let mut plan = match &table_with_join.relation {
                 TableFactor::Table {
                     name,
                     alias: _,
@@ -116,46 +117,45 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
                 _ => todo!(),
             };
 
-            let filter = if let Some(selection) = &select.selection {
+            // create Filter node
+            if let Some(selection) = &select.selection {
                 let filter_expr = ast_expr_to_plan_expr(selection)?;
-                LogicalPlan::Filter {
+                plan = LogicalPlan::Filter {
                     expression: filter_expr,
-                    child: Box::new(scan),
-                }
-            } else {
-                scan
-            };
+                    child: Box::new(plan),
+                };
+            }
 
-            // create Aggregate or Projection when necessary
-            let projections = select.projection;
+            // create Aggregator node
             if !select.group_by.is_empty() {
                 let groupings = select
                     .group_by
                     .iter()
                     .map(ast_expr_to_plan_expr)
                     .collect::<DBResult<Vec<_>>>()?;
-                let aggregators = projections
-                    .into_iter()
-                    .map(ast_projection_to_plan_expr)
-                    .collect::<DBResult<Vec<_>>>()?;
-                LogicalPlan::Aggregator {
+
+                let aggregators = vec![];
+                plan = LogicalPlan::Aggregator {
                     aggregators,
                     groupings,
-                    child: Box::new(filter),
-                }
-            } else if !is_projection_empty(&projections) {
+                    child: Box::new(plan),
+                };
+            }
+
+            // create Projection node
+            let projections = select.projection;
+            if !is_projection_empty(&projections) {
                 let projection_exprs = projections
                     .into_iter()
                     .map(ast_projection_to_plan_expr)
                     .collect::<DBResult<Vec<_>>>()?;
 
-                LogicalPlan::Projection {
+                plan = LogicalPlan::Projection {
                     expressions: projection_exprs,
-                    child: Box::new(filter),
+                    child: Box::new(plan),
                 }
-            } else {
-                filter
             }
+            plan
         }
         _ => {
             return Err(DBError::Unknown(

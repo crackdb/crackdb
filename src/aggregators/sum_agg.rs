@@ -54,7 +54,7 @@ impl Aggregator for SumAgg {
         let error = DBError::InterpretingError("Cannot resolve sum agg expr".to_string());
         let new_sum_expr = self
             .sum_expr
-            .transform_bottom_up(&context, ResolveExprRule::resolve_expression)?
+            .transform_bottom_up(&context, &mut ResolveExprRule::resolve_expression)?
             .ok_or(error)?;
         // TODO: implement cast rule
         self.sum_expr = new_sum_expr;

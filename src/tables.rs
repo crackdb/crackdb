@@ -64,6 +64,10 @@ impl RelationSchema {
     pub fn get_fields(&self) -> &Vec<FieldInfo> {
         &self.fields
     }
+
+    pub(crate) fn empty() -> RelationSchema {
+        RelationSchema::new(vec![])
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

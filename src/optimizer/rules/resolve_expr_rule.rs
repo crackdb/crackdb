@@ -2,7 +2,7 @@ use crate::{
     expressions::Expression,
     logical_plans::LogicalPlan,
     optimizer::{OptimizerContext, OptimizerContextForExpr},
-    DBError, DBResult,
+    DBResult,
 };
 
 use super::Rule;
@@ -26,7 +26,7 @@ impl Rule<Expression> for ResolveExprRule {
         node: &Expression,
         context: &OptimizerContextForExpr,
     ) -> DBResult<Option<Expression>> {
-        node.transform_bottom_up(context, Self::resolve_expression)
+        node.transform_bottom_up(context, &mut Self::resolve_expression)
     }
 }
 
@@ -55,7 +55,7 @@ impl ResolveExprRule {
                             .data_type()
                             .clone(),
                     })),
-                    None => Err(DBError::Unknown(format!("Cannot find field {name}"))),
+                    None => Ok(None),
                 }
             }
             Expression::FieldRef { .. } => Ok(None),

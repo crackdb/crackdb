@@ -1,4 +1,9 @@
-use crate::{expressions::Literal, row::Row, tables::RelationSchema, DBResult};
+use crate::{
+    expressions::{Expression, Literal},
+    row::Row,
+    tables::{FieldInfo, RelationSchema},
+    DBResult,
+};
 
 mod avg_agg;
 mod sum_agg;
@@ -17,4 +22,20 @@ pub trait Aggregator {
 
     /// calculate result based on result row
     fn result(&self, result_row: &Row) -> DBResult<Literal>;
+}
+
+/// Build the schema for Aggregator plan node.
+///
+/// Append aggregators after groupings to make the scehma stable, since aggregators
+/// might change during optimization
+pub fn aggregator_schema(
+    groupings: &[Expression],
+    aggregators: &[Expression],
+) -> RelationSchema {
+    let fields = groupings
+        .iter()
+        .chain(aggregators.iter())
+        .map(|expr| FieldInfo::new(expr.to_string(), expr.data_type()))
+        .collect();
+    RelationSchema::new(fields)
 }

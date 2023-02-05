@@ -55,7 +55,7 @@ impl OptimizerContextForExpr {
 }
 
 pub struct Optimizer {
-    rules: Vec<Box<dyn Rule<LogicalPlan>>>,
+    rules: Vec<Vec<Box<dyn Rule<LogicalPlan>>>>,
     catalog: Arc<RwLock<Catalog>>,
 }
 
@@ -68,19 +68,35 @@ impl Optimizer {
         let context = OptimizerContext {
             catalog: Arc::clone(&self.catalog),
         };
+
         let mut node_under_plan = plan;
+        for stage_rules in &self.rules {
+            node_under_plan =
+                Self::optimize_with_stage_rules(node_under_plan, &context, stage_rules)?;
+        }
+
+        Ok(node_under_plan)
+    }
+
+    fn optimize_with_stage_rules(
+        node: LogicalPlan,
+        context: &OptimizerContext,
+        rules: &[Box<dyn Rule<LogicalPlan>>],
+    ) -> DBResult<LogicalPlan> {
+        let mut node_under_plan = node;
         let mut changed = true;
 
         // FIXME: prevent potential infinite looping
         while changed {
             changed = false;
-            for rule in self.rules.iter() {
-                if let Some(new_node) = rule.apply(&node_under_plan, &context)? {
+            for rule in rules.iter() {
+                if let Some(new_node) = rule.apply(&node_under_plan, context)? {
                     node_under_plan = new_node;
                     changed = true;
                 }
             }
         }
+
         Ok(node_under_plan)
     }
 }

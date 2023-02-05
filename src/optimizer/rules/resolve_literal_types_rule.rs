@@ -26,7 +26,7 @@ impl Rule<Expression> for ResolveLiteralTypesRule {
         node: &Expression,
         context: &OptimizerContextForExpr,
     ) -> crate::DBResult<Option<Expression>> {
-        node.transform_bottom_up(context, Self::resolve_literal_type)
+        node.transform_bottom_up(context, &mut Self::resolve_literal_type)
     }
 }
 

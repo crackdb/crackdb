@@ -23,7 +23,7 @@ impl Rule<Expression> for ResolveFunctionsRule {
         node: &Expression,
         context: &<Expression as crate::optimizer::OptimizerNode>::Context,
     ) -> crate::DBResult<Option<Expression>> {
-        node.transform_bottom_up(context, Self::resolve_functions)
+        node.transform_bottom_up(context, &mut Self::resolve_functions)
     }
 }
 

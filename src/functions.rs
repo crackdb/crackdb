@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub trait Function: std::fmt::Debug {
+    /// TODO: consider remove this method
     fn is_aggregator(&self) -> bool;
 
     fn aggregator(&self) -> DBResult<Box<dyn Aggregator>>;
@@ -29,7 +30,8 @@ pub trait Function: std::fmt::Debug {
 
     fn data_type(&self) -> DataType;
 
-    fn with_args(&mut self, args: Vec<Expression>) -> DBResult<()>;
+    /// TODO: the return signature is wired
+    fn with_args(&self, args: Vec<Expression>) -> DBResult<Rc<dyn Function>>;
 }
 
 #[derive(Debug)]
@@ -46,11 +48,18 @@ impl Default for FunctionsRegistry {
 impl FunctionsRegistry {
     pub fn new() -> Self {
         let mut functions = HashMap::new();
-        functions.insert("sum".to_string(), FunctionBuilder::new(SumFunction::build));
-        functions.insert("avg".to_string(), FunctionBuilder::new(AvgFunction::build));
+        functions.insert(
+            "sum".to_string(),
+            FunctionBuilder::new_aggregator(SumFunction::build),
+        );
+        functions.insert(
+            "avg".to_string(),
+            FunctionBuilder::new_aggregator(AvgFunction::build),
+        );
 
         Self { functions }
     }
+
     pub fn get_function(
         &self,
         name: &str,
@@ -61,10 +70,23 @@ impl FunctionsRegistry {
             None => Ok(None),
         }
     }
+
+    pub fn is_aggregator(&self, expr: &Expression) -> bool {
+        match expr {
+            Expression::UnResolvedFunction { name, .. } => self
+                .functions
+                .get(name)
+                .map(|f| f.is_aggregator)
+                .unwrap_or(false),
+            Expression::Function(f) => f.is_aggregator(),
+            _ => false,
+        }
+    }
 }
 
 pub struct FunctionBuilder {
     builder: fn(&[Expression]) -> DBResult<Rc<dyn Function>>,
+    is_aggregator: bool,
 }
 
 impl fmt::Debug for FunctionBuilder {
@@ -74,9 +96,21 @@ impl fmt::Debug for FunctionBuilder {
 }
 
 impl FunctionBuilder {
-    pub fn new(builder: fn(&[Expression]) -> DBResult<Rc<dyn Function>>) -> Self {
-        Self { builder }
+    pub fn _new(builder: fn(&[Expression]) -> DBResult<Rc<dyn Function>>) -> Self {
+        Self {
+            builder,
+            is_aggregator: false,
+        }
     }
+    pub fn new_aggregator(
+        builder: fn(&[Expression]) -> DBResult<Rc<dyn Function>>,
+    ) -> Self {
+        Self {
+            builder,
+            is_aggregator: true,
+        }
+    }
+
     pub fn build(&self, args: &[Expression]) -> DBResult<Rc<dyn Function>> {
         (self.builder)(args)
     }
@@ -120,10 +154,12 @@ impl Function for SumFunction {
         self.arg.data_type()
     }
 
-    fn with_args(&mut self, args: Vec<Expression>) -> DBResult<()> {
+    fn with_args(&self, args: Vec<Expression>) -> DBResult<Rc<dyn Function>> {
         if args.len() == 1 {
-            self.arg = args.into_iter().next().unwrap();
-            Ok(())
+            let arg = SumFunction {
+                arg: args.into_iter().next().unwrap(),
+            };
+            Ok(Rc::new(arg))
         } else {
             Err(DBError::Unknown("invalid args".to_string()))
         }
@@ -168,10 +204,10 @@ impl Function for AvgFunction {
         DataType::Float64
     }
 
-    fn with_args(&mut self, args: Vec<Expression>) -> DBResult<()> {
+    fn with_args(&self, args: Vec<Expression>) -> DBResult<Rc<dyn Function>> {
         if args.len() == 1 {
-            self.arg = args.into_iter().next().unwrap();
-            Ok(())
+            let arg = args.into_iter().next().unwrap();
+            Ok(Rc::new(AvgFunction { arg }))
         } else {
             Err(DBError::Unknown("invalid args".to_string()))
         }

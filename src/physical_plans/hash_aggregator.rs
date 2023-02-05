@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    aggregators::Aggregator,
+    aggregators::{aggregator_schema, Aggregator},
     expressions::{Expression, Literal},
     interpreter::Interpreter,
     row::Row,
-    tables::{FieldInfo, RelationSchema},
+    tables::RelationSchema,
     DBError, DBResult,
 };
 
@@ -92,16 +92,16 @@ impl HashAggregator {
 
     fn try_push(&mut self) -> DBResult<Option<Row<'static>>> {
         let opt_row = self.iter.as_mut().expect("should never happen").next().map(
-            |(groupings, aggregations)| {
+            |(mut groupings, aggregations)| {
                 let agg_results = self
                     .aggregators
                     .iter()
                     .zip(aggregations.iter())
                     .map(|(agg, result)| agg.result(result))
                     .collect::<DBResult<Vec<_>>>();
-                agg_results.map(|mut aggs| {
-                    aggs.extend(groupings);
-                    Row::new(aggs)
+                agg_results.map(|aggs| {
+                    groupings.extend(aggs);
+                    Row::new(groupings)
                 })
             },
         );
@@ -129,12 +129,9 @@ impl PhysicalPlan for HashAggregator {
     }
 
     fn schema(&self) -> DBResult<RelationSchema> {
-        let fields =
-            Iterator::chain(self.aggregator_exprs.iter(), self.grouping_exprs.iter())
-                .map(|expr| FieldInfo::new(expr.to_string(), expr.data_type()))
-                .collect();
-
-        let schema = RelationSchema::new(fields);
-        Ok(schema)
+        Ok(aggregator_schema(
+            &self.grouping_exprs,
+            &self.aggregator_exprs,
+        ))
     }
 }

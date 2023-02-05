@@ -1,3 +1,4 @@
+use crate::aggregators::aggregator_schema;
 use crate::expressions::Expression;
 use crate::optimizer::rules::Rule;
 use crate::optimizer::{OptimizerContext, OptimizerContextForExpr, OptimizerNode};
@@ -58,15 +59,7 @@ impl LogicalPlan {
                 aggregators,
                 groupings,
                 ..
-            } => {
-                let fields = aggregators
-                    .iter()
-                    .chain(groupings.iter())
-                    .map(|expr| FieldInfo::new(expr.to_string(), expr.data_type()))
-                    .collect();
-                let schema = RelationSchema::new(fields);
-                Ok(schema)
-            }
+            } => Ok(aggregator_schema(groupings, aggregators)),
         }
     }
 
