@@ -55,23 +55,23 @@ impl FunctionsRegistry {
         // TODO: revisit this, it's too complex
         functions.insert(
             "sum".to_string(),
-            FunctionBuilder::new_aggregator(SumFunction::build),
+            FunctionBuilder::new_aggregator(build_sum_fn),
         );
         functions.insert(
             "avg".to_string(),
-            FunctionBuilder::new_aggregator(AvgFunction::build),
+            FunctionBuilder::new_aggregator(build_avg_fn),
         );
         functions.insert(
             "count".to_string(),
-            FunctionBuilder::new_aggregator(CountFunction::build),
+            FunctionBuilder::new_aggregator(build_count_fn),
         );
         functions.insert(
             "max".to_string(),
-            FunctionBuilder::new_aggregator(MaxFunction::build),
+            FunctionBuilder::new_aggregator(build_max_fn),
         );
         functions.insert(
             "min".to_string(),
-            FunctionBuilder::new_aggregator(MinFunction::build),
+            FunctionBuilder::new_aggregator(build_min_fn),
         );
         Self { functions }
     }
@@ -132,107 +132,87 @@ impl FunctionBuilder {
     }
 }
 
-pub struct SumFunction {}
-
-impl SumFunction {
-    fn build(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
-        if args.len() == 1 {
-            let arg = args[0].clone();
-            let function = AggFunction::new(
-                "sum",
-                Rc::new(|arg| arg.data_type()),
-                arg,
-                Rc::new(|arg| {
-                    SumAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
-                }),
-            );
-            Ok(Rc::new(function) as Rc<dyn Function>)
-        } else {
-            Err(DBError::Unknown("invalid args".to_string()))
-        }
+fn build_sum_fn(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
+    if args.len() == 1 {
+        let arg = args[0].clone();
+        let function = AggFunction::new(
+            "sum",
+            Rc::new(|arg| arg.data_type()),
+            arg,
+            Rc::new(|arg| {
+                SumAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
+            }),
+        );
+        Ok(Rc::new(function) as Rc<dyn Function>)
+    } else {
+        Err(DBError::Unknown("invalid args".to_string()))
     }
 }
 
-pub struct AvgFunction {}
-
-impl AvgFunction {
-    fn build(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
-        if args.len() == 1 {
-            let arg = args[0].clone();
-            let function = AggFunction::new(
-                "avg",
-                Rc::new(|_| DataType::Float64),
-                arg,
-                Rc::new(|arg| {
-                    AvgAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
-                }),
-            );
-            Ok(Rc::new(function) as Rc<dyn Function>)
-        } else {
-            Err(DBError::Unknown("invalid args".to_string()))
-        }
+fn build_avg_fn(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
+    if args.len() == 1 {
+        let arg = args[0].clone();
+        let function = AggFunction::new(
+            "avg",
+            Rc::new(|_| DataType::Float64),
+            arg,
+            Rc::new(|arg| {
+                AvgAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
+            }),
+        );
+        Ok(Rc::new(function) as Rc<dyn Function>)
+    } else {
+        Err(DBError::Unknown("invalid args".to_string()))
     }
 }
 
-pub struct CountFunction {}
-
-impl CountFunction {
-    fn build(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
-        if args.len() == 1 {
-            let arg = args[0].clone();
-            let function = AggFunction::new(
-                "count",
-                Rc::new(|_| DataType::UInt64),
-                arg,
-                Rc::new(|arg| {
-                    CountAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
-                }),
-            );
-            Ok(Rc::new(function) as Rc<dyn Function>)
-        } else {
-            Err(DBError::Unknown("invalid args".to_string()))
-        }
+fn build_count_fn(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
+    if args.len() == 1 {
+        let arg = args[0].clone();
+        let function = AggFunction::new(
+            "count",
+            Rc::new(|_| DataType::UInt64),
+            arg,
+            Rc::new(|arg| {
+                CountAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
+            }),
+        );
+        Ok(Rc::new(function) as Rc<dyn Function>)
+    } else {
+        Err(DBError::Unknown("invalid args".to_string()))
     }
 }
 
-pub struct MaxFunction {}
-
-impl MaxFunction {
-    fn build(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
-        if args.len() == 1 {
-            let arg = args[0].clone();
-            let function = AggFunction::new(
-                "max",
-                Rc::new(|arg| arg.data_type()),
-                arg,
-                Rc::new(|arg| {
-                    MaxAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
-                }),
-            );
-            Ok(Rc::new(function) as Rc<dyn Function>)
-        } else {
-            Err(DBError::Unknown("invalid args".to_string()))
-        }
+fn build_max_fn(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
+    if args.len() == 1 {
+        let arg = args[0].clone();
+        let function = AggFunction::new(
+            "max",
+            Rc::new(|arg| arg.data_type()),
+            arg,
+            Rc::new(|arg| {
+                MaxAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
+            }),
+        );
+        Ok(Rc::new(function) as Rc<dyn Function>)
+    } else {
+        Err(DBError::Unknown("invalid args".to_string()))
     }
 }
 
-pub struct MinFunction {}
-
-impl MinFunction {
-    fn build(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
-        if args.len() == 1 {
-            let arg = args[0].clone();
-            let function = AggFunction::new(
-                "min",
-                Rc::new(|arg| arg.data_type()),
-                arg,
-                Rc::new(|arg| {
-                    MinAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
-                }),
-            );
-            Ok(Rc::new(function) as Rc<dyn Function>)
-        } else {
-            Err(DBError::Unknown("invalid args".to_string()))
-        }
+fn build_min_fn(args: &[Expression]) -> DBResult<Rc<dyn Function>> {
+    if args.len() == 1 {
+        let arg = args[0].clone();
+        let function = AggFunction::new(
+            "min",
+            Rc::new(|arg| arg.data_type()),
+            arg,
+            Rc::new(|arg| {
+                MinAgg::new(arg).map(|agg| Box::new(agg) as Box<dyn Aggregator>)
+            }),
+        );
+        Ok(Rc::new(function) as Rc<dyn Function>)
+    } else {
+        Err(DBError::Unknown("invalid args".to_string()))
     }
 }
