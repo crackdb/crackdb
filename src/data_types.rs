@@ -50,6 +50,42 @@ impl DataType {
             _ => Err(DBError::Unknown(format!("zero not supported for {self}"))),
         }
     }
+
+    pub fn max_value(&self) -> DBResult<Literal> {
+        match self {
+            DataType::UInt8 => Ok(Literal::UInt8(u8::MAX)),
+            DataType::UInt16 => Ok(Literal::UInt16(u16::MAX)),
+            DataType::UInt32 => Ok(Literal::UInt32(u32::MAX)),
+            DataType::UInt64 => Ok(Literal::UInt64(u64::MAX)),
+            DataType::Int8 => Ok(Literal::Int8(i8::MAX)),
+            DataType::Int16 => Ok(Literal::Int16(i16::MAX)),
+            DataType::Int32 => Ok(Literal::Int32(i32::MAX)),
+            DataType::Int64 => Ok(Literal::Int64(i64::MAX)),
+            DataType::Float32 => Ok(Literal::Float32(f32::MAX)),
+            DataType::Float64 => Ok(Literal::Float64(f64::MAX)),
+            _ => Err(DBError::Unknown(format!(
+                "max_value not supported for {self}"
+            ))),
+        }
+    }
+
+    pub fn min_value(&self) -> DBResult<Literal> {
+        match self {
+            DataType::UInt8 => Ok(Literal::UInt8(u8::MIN)),
+            DataType::UInt16 => Ok(Literal::UInt16(u16::MIN)),
+            DataType::UInt32 => Ok(Literal::UInt32(u32::MIN)),
+            DataType::UInt64 => Ok(Literal::UInt64(u64::MIN)),
+            DataType::Int8 => Ok(Literal::Int8(i8::MIN)),
+            DataType::Int16 => Ok(Literal::Int16(i16::MIN)),
+            DataType::Int32 => Ok(Literal::Int32(i32::MIN)),
+            DataType::Int64 => Ok(Literal::Int64(i64::MIN)),
+            DataType::Float32 => Ok(Literal::Float32(f32::MIN)),
+            DataType::Float64 => Ok(Literal::Float64(f64::MIN)),
+            _ => Err(DBError::Unknown(format!(
+                "min_value not supported for {self}"
+            ))),
+        }
+    }
 }
 
 impl Display for DataType {

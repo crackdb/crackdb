@@ -8,24 +8,24 @@ use crate::{
 
 use super::{aggregating_buffer::AggregatingBuffer, Aggregator};
 
-const FIELD_SUM: &str = "sum_agg_sum";
+const FIELD_MIN: &str = "min_agg_min";
 
-pub struct SumAgg {
+pub struct MinAgg {
     agg_buffer: AggregatingBuffer,
     data_type: DataType,
 }
 
-impl SumAgg {
+impl MinAgg {
     pub fn new(arg: &Expression) -> DBResult<Self> {
         let expr = Expression::BinaryOp {
-            op: BinaryOp::Plus,
-            left: Box::new(Expression::UnResolvedFieldRef(FIELD_SUM.to_string())),
+            op: BinaryOp::Min,
+            left: Box::new(Expression::UnResolvedFieldRef(FIELD_MIN.to_string())),
             right: Box::new(arg.clone()),
         };
         let data_type = arg.data_type();
         let aggregating_exprs = vec![expr];
         let buffer_schema = RelationSchema::new(vec![FieldInfo::new(
-            FIELD_SUM.to_owned(),
+            FIELD_MIN.to_owned(),
             data_type.clone(),
         )]);
         let agg_buffer = AggregatingBuffer::new(buffer_schema, aggregating_exprs);
@@ -35,10 +35,10 @@ impl SumAgg {
         })
     }
 }
-impl Aggregator for SumAgg {
+impl Aggregator for MinAgg {
     fn initial_row(&self) -> DBResult<Row<'static>> {
         // TODO: consider self.agg_buffer.buffer_schema.row(literals) to get the row
-        Ok(Row::new(vec![self.data_type.zero()?]))
+        Ok(Row::new(vec![self.data_type.max_value()?]))
     }
 
     fn resolve_expr(&mut self, inbound_schema: &RelationSchema) -> DBResult<()> {

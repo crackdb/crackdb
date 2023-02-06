@@ -1,3 +1,5 @@
+use std::cmp::{max, min};
+
 use crate::{
     expressions::{BinaryOp, Literal, UnaryOp},
     DBError::InterpretingError,
@@ -100,6 +102,56 @@ pub fn negative_impl(input: Literal) -> DBResult<Literal> {
             "{:?} operator not implemented for {:?}",
             UnaryOp::Neg,
             input
+        ))),
+    }
+}
+
+pub fn max_impl(left: Literal, right: Literal) -> DBResult<Literal> {
+    match (left, right) {
+        (Literal::Int8(l), Literal::Int8(r)) => Ok(Literal::Int8(max(l, r))),
+        (Literal::Int16(l), Literal::Int16(r)) => Ok(Literal::Int16(max(l, r))),
+        (Literal::Int32(l), Literal::Int32(r)) => Ok(Literal::Int32(max(l, r))),
+        (Literal::Int64(l), Literal::Int64(r)) => Ok(Literal::Int64(max(l, r))),
+        (Literal::UInt8(l), Literal::UInt8(r)) => Ok(Literal::UInt8(max(l, r))),
+        (Literal::UInt16(l), Literal::UInt16(r)) => Ok(Literal::UInt16(max(l, r))),
+        (Literal::UInt32(l), Literal::UInt32(r)) => Ok(Literal::UInt32(max(l, r))),
+        (Literal::UInt64(l), Literal::UInt64(r)) => Ok(Literal::UInt64(max(l, r))),
+        (Literal::Float32(l), Literal::Float32(r)) => {
+            Ok(Literal::Float32(f32::max(l, r)))
+        }
+        (Literal::Float64(l), Literal::Float64(r)) => {
+            Ok(Literal::Float64(f64::max(l, r)))
+        }
+        (left, right) => Err(InterpretingError(format!(
+            "{:?} operator not implemented for {:?} and {:?}",
+            BinaryOp::Max,
+            left,
+            right
+        ))),
+    }
+}
+
+pub fn min_impl(left: Literal, right: Literal) -> DBResult<Literal> {
+    match (left, right) {
+        (Literal::Int8(l), Literal::Int8(r)) => Ok(Literal::Int8(min(l, r))),
+        (Literal::Int16(l), Literal::Int16(r)) => Ok(Literal::Int16(min(l, r))),
+        (Literal::Int32(l), Literal::Int32(r)) => Ok(Literal::Int32(min(l, r))),
+        (Literal::Int64(l), Literal::Int64(r)) => Ok(Literal::Int64(min(l, r))),
+        (Literal::UInt8(l), Literal::UInt8(r)) => Ok(Literal::UInt8(min(l, r))),
+        (Literal::UInt16(l), Literal::UInt16(r)) => Ok(Literal::UInt16(min(l, r))),
+        (Literal::UInt32(l), Literal::UInt32(r)) => Ok(Literal::UInt32(min(l, r))),
+        (Literal::UInt64(l), Literal::UInt64(r)) => Ok(Literal::UInt64(min(l, r))),
+        (Literal::Float32(l), Literal::Float32(r)) => {
+            Ok(Literal::Float32(f32::min(l, r)))
+        }
+        (Literal::Float64(l), Literal::Float64(r)) => {
+            Ok(Literal::Float64(f64::min(l, r)))
+        }
+        (left, right) => Err(InterpretingError(format!(
+            "{:?} operator not implemented for {:?} and {:?}",
+            BinaryOp::Min,
+            left,
+            right
         ))),
     }
 }

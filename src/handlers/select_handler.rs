@@ -43,7 +43,7 @@ impl SelectHandler {
         let optimizer = Optimizer::new(Arc::clone(&self.catalog));
         let optimized_logical_plan = optimizer.optimize(logical_plan)?;
 
-        // println!("optimized logical plan: {optimized_logical_plan:?}");
+        println!("optimized logical plan: {optimized_logical_plan:?}");
 
         // transform to physical plan by planning it
         let mut physical_plan = self.planning(optimized_logical_plan)?;
@@ -440,6 +440,6 @@ fn ast_function_arg_expr_to_plan_expr(arg: &FunctionArgExpr) -> DBResult<Express
     match arg {
         FunctionArgExpr::Expr(expr) => ast_expr_to_plan_expr(expr),
         FunctionArgExpr::QualifiedWildcard(_) => todo!(),
-        FunctionArgExpr::Wildcard => todo!(),
+        FunctionArgExpr::Wildcard => Ok(Expression::Wildcard),
     }
 }

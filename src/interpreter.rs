@@ -8,7 +8,10 @@ use crate::{
 };
 
 use self::{
-    arithmetic::{divide_impl, minus_impl, multiply_impl, negative_impl, plus_impl},
+    arithmetic::{
+        divide_impl, max_impl, min_impl, minus_impl, multiply_impl, negative_impl,
+        plus_impl,
+    },
     booleans::{
         and_impl, eq_impl, gt_impl, gte_impl, lt_impl, lte_impl, not_impl, or_impl,
     },
@@ -38,6 +41,8 @@ impl Interpreter {
                     BinaryOp::Lte => lte_impl(left, right),
                     BinaryOp::And => and_impl(left, right),
                     BinaryOp::Or => or_impl(left, right),
+                    BinaryOp::Max => max_impl(left, right),
+                    BinaryOp::Min => min_impl(left, right),
                 }
             }
             Expression::UnaryOp { op, input } => match op {
@@ -49,6 +54,7 @@ impl Interpreter {
                 "Trying evaluate an unresolved function".to_string(),
             )),
             Expression::Function(_) => todo!(),
+            Expression::Wildcard => todo!(),
         }
     }
 }

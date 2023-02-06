@@ -1,4 +1,5 @@
 use crate::{
+    data_types::DataType,
     expressions::Expression,
     logical_plans::LogicalPlan,
     optimizer::{OptimizerContext, OptimizerContextForExpr},
@@ -49,8 +50,7 @@ impl ResolveExprRule {
                         index: idx,
                         data_type: context
                             .schema()
-                            .get_fields()
-                            .get(idx)
+                            .get_field_at(idx)
                             .unwrap()
                             .data_type()
                             .clone(),
@@ -58,12 +58,23 @@ impl ResolveExprRule {
                     None => Ok(None),
                 }
             }
-            Expression::FieldRef { .. } => Ok(None),
-            Expression::BinaryOp { .. } => Ok(None),
-            Expression::UnaryOp { .. } => Ok(None),
-            Expression::Alias { .. } => Ok(None),
-            Expression::Function(_) => Ok(None),
-            Expression::UnResolvedFunction { .. } => Ok(None),
+            Expression::FieldRef {
+                name,
+                data_type,
+                index,
+            } if *data_type == DataType::Unknown => {
+                match context.schema().get_field_at(*index) {
+                    Some(f) if *(f.data_type()) != DataType::Unknown => {
+                        Ok(Some(Expression::FieldRef {
+                            name: name.to_string(),
+                            index: *index,
+                            data_type: f.data_type().clone(),
+                        }))
+                    }
+                    _ => Ok(None),
+                }
+            }
+            _ => Ok(None),
         }
     }
 }

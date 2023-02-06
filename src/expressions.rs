@@ -36,6 +36,7 @@ pub enum Expression {
     },
     // TODO: revisit the usage of Rc here
     Function(Rc<dyn Function>),
+    Wildcard,
 }
 
 impl Display for Expression {
@@ -58,6 +59,7 @@ impl Display for Expression {
                     .join(", ")
             ),
             Expression::Function(func) => func.as_ref().to_expr_string().fmt(f),
+            Expression::Wildcard => "*".fmt(f),
         }
     }
 }
@@ -75,6 +77,8 @@ pub enum BinaryOp {
     Lte,
     And,
     Or,
+    Max,
+    Min,
 }
 
 impl Display for BinaryOp {
@@ -91,6 +95,8 @@ impl Display for BinaryOp {
             BinaryOp::Lte => "<=".fmt(f),
             BinaryOp::And => "AND".fmt(f),
             BinaryOp::Or => "OR".fmt(f),
+            BinaryOp::Max => "MAX".fmt(f),
+            BinaryOp::Min => "MIN".fmt(f),
         }
     }
 }
@@ -144,6 +150,7 @@ impl Expression {
             // TODO: implement this
             Expression::UnResolvedFunction { name: _, args: _ } => DataType::Unknown,
             Expression::Function(func) => func.as_ref().data_type(),
+            Expression::Wildcard => DataType::Unknown,
         }
     }
 
@@ -204,6 +211,7 @@ impl Expression {
                     f.with_args(args).map(Expression::Function)
                 })
             }
+            Expression::Wildcard => func(self, context),
         }
     }
 

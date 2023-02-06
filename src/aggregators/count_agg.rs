@@ -1,6 +1,6 @@
 use crate::{
     data_types::DataType,
-    expressions::{BinaryOp, Expression},
+    expressions::{BinaryOp, Expression, Literal},
     row::Row,
     tables::{FieldInfo, RelationSchema},
     DBResult,
@@ -8,37 +8,32 @@ use crate::{
 
 use super::{aggregating_buffer::AggregatingBuffer, Aggregator};
 
-const FIELD_SUM: &str = "sum_agg_sum";
+const FIELD_COUNT: &str = "count_agg_count";
 
-pub struct SumAgg {
+pub struct CountAgg {
     agg_buffer: AggregatingBuffer,
-    data_type: DataType,
 }
 
-impl SumAgg {
-    pub fn new(arg: &Expression) -> DBResult<Self> {
+impl CountAgg {
+    pub fn new(_arg: &Expression) -> DBResult<Self> {
         let expr = Expression::BinaryOp {
             op: BinaryOp::Plus,
-            left: Box::new(Expression::UnResolvedFieldRef(FIELD_SUM.to_string())),
-            right: Box::new(arg.clone()),
+            left: Box::new(Expression::UnResolvedFieldRef(FIELD_COUNT.to_string())),
+            right: Box::new(Expression::Literal(Literal::UInt64(1))),
         };
-        let data_type = arg.data_type();
         let aggregating_exprs = vec![expr];
         let buffer_schema = RelationSchema::new(vec![FieldInfo::new(
-            FIELD_SUM.to_owned(),
-            data_type.clone(),
+            FIELD_COUNT.to_owned(),
+            DataType::UInt64,
         )]);
         let agg_buffer = AggregatingBuffer::new(buffer_schema, aggregating_exprs);
-        Ok(Self {
-            agg_buffer,
-            data_type,
-        })
+        Ok(Self { agg_buffer })
     }
 }
-impl Aggregator for SumAgg {
+impl Aggregator for CountAgg {
     fn initial_row(&self) -> DBResult<Row<'static>> {
         // TODO: consider self.agg_buffer.buffer_schema.row(literals) to get the row
-        Ok(Row::new(vec![self.data_type.zero()?]))
+        Ok(Row::new(vec![Literal::UInt64(0)]))
     }
 
     fn resolve_expr(&mut self, inbound_schema: &RelationSchema) -> DBResult<()> {
@@ -49,7 +44,7 @@ impl Aggregator for SumAgg {
         self.agg_buffer.process(input_row, output_buffer)
     }
 
-    fn result(&self, output_buffer: &Row) -> DBResult<crate::expressions::Literal> {
+    fn result(&self, output_buffer: &Row) -> DBResult<Literal> {
         output_buffer.get_field(0)
     }
 }

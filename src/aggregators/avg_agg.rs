@@ -1,21 +1,18 @@
 use crate::{
     data_types::DataType,
     expressions::{BinaryOp, Expression, Literal},
-    interpreter::Interpreter,
-    optimizer::{rules::ResolveExprRule, OptimizerContextForExpr},
     row::Row,
     tables::{FieldInfo, RelationSchema},
     DBError, DBResult,
 };
 
-use super::Aggregator;
+use super::{aggregating_buffer::AggregatingBuffer, Aggregator};
 
 const FIELD_AVG_SUM: &str = "avg_sum";
 const FIELD_AVG_COUNT: &str = "avg_count";
 
 pub struct AvgAgg {
-    count_expr: Expression,
-    sum_expr: Expression,
+    agg_buffer: AggregatingBuffer,
 }
 
 impl AvgAgg {
@@ -30,11 +27,13 @@ impl AvgAgg {
             left: Box::new(Expression::Literal(Literal::UInt64(1))),
             right: Box::new(Expression::UnResolvedFieldRef(FIELD_AVG_COUNT.to_owned())),
         };
-        let agg = Self {
-            count_expr,
-            sum_expr,
-        };
-        Ok(agg)
+        let aggregating_exprs = vec![sum_expr, count_expr];
+        let buffer_schema = RelationSchema::new(vec![
+            FieldInfo::new(FIELD_AVG_SUM.to_owned(), DataType::Float64),
+            FieldInfo::new(FIELD_AVG_COUNT.to_owned(), DataType::UInt64),
+        ]);
+        let agg_buffer = AggregatingBuffer::new(buffer_schema, aggregating_exprs);
+        Ok(Self { agg_buffer })
     }
 }
 
@@ -44,49 +43,15 @@ impl Aggregator for AvgAgg {
     }
 
     fn resolve_expr(&mut self, inbound_schema: &RelationSchema) -> DBResult<()> {
-        let extended_fields = [
-            FieldInfo::new(FIELD_AVG_SUM.to_owned(), DataType::Float64),
-            FieldInfo::new(FIELD_AVG_COUNT.to_owned(), DataType::UInt64),
-        ];
-
-        let new_fields = inbound_schema
-            .get_fields()
-            .iter()
-            .chain(extended_fields.iter())
-            .cloned()
-            .collect();
-        let schema = RelationSchema::new(new_fields);
-        let context = OptimizerContextForExpr::new(schema);
-        let new_sum_expr = self
-            .sum_expr
-            .transform_bottom_up(&context, &mut ResolveExprRule::resolve_expression)?
-            .ok_or(DBError::InterpretingError(
-                "Cannot resolve avg agg expr".to_string(),
-            ))?;
-        let new_count_expr = self
-            .count_expr
-            .transform_bottom_up(&context, &mut ResolveExprRule::resolve_expression)?
-            .ok_or(DBError::InterpretingError(
-                "Cannot resolve avg agg expr".to_string(),
-            ))?;
-        // TODO: implement cast rule
-        self.sum_expr = new_sum_expr;
-        self.count_expr = new_count_expr;
-        Ok(())
+        self.agg_buffer.resolve_expr(inbound_schema)
     }
 
-    fn process(&self, input_row: &Row, result_row: &mut Row) -> DBResult<()> {
-        let target = Row::concat(input_row, result_row);
-        let count = Interpreter::eval(&self.count_expr, &target)?;
-        let sum = Interpreter::eval(&self.sum_expr, &target)?;
-
-        result_row.update_field(0, sum)?;
-        result_row.update_field(1, count)?;
-        Ok(())
+    fn process(&self, input_row: &Row, output_buffer: &mut Row) -> DBResult<()> {
+        self.agg_buffer.process(input_row, output_buffer)
     }
 
-    fn result(&self, result_row: &Row) -> DBResult<Literal> {
-        match (result_row.get_field(0)?, result_row.get_field(1)?) {
+    fn result(&self, output_buffer: &Row) -> DBResult<Literal> {
+        match (output_buffer.get_field(0)?, output_buffer.get_field(1)?) {
             (Literal::Float64(sum), Literal::UInt64(count)) => {
                 Ok(Literal::Float64(sum / (count as f64)))
             }

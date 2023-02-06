@@ -65,8 +65,23 @@ impl RelationSchema {
         &self.fields
     }
 
+    pub fn get_field_at(&self, idx: usize) -> Option<&FieldInfo> {
+        self.fields.get(idx)
+    }
+
     pub(crate) fn empty() -> RelationSchema {
         RelationSchema::new(vec![])
+    }
+
+    pub(crate) fn merge(left: &RelationSchema, right: &RelationSchema) -> RelationSchema {
+        // TODO: fields deduplication
+        let new_fields = left
+            .get_fields()
+            .iter()
+            .chain(right.get_fields().iter())
+            .cloned()
+            .collect();
+        RelationSchema::new(new_fields)
     }
 }
 

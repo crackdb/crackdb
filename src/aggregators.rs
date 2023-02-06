@@ -5,9 +5,16 @@ use crate::{
     DBResult,
 };
 
+mod aggregating_buffer;
 mod avg_agg;
+mod count_agg;
+mod max_agg;
+mod min_agg;
 mod sum_agg;
 pub use avg_agg::AvgAgg;
+pub use count_agg::CountAgg;
+pub use max_agg::MaxAgg;
+pub use min_agg::MinAgg;
 pub use sum_agg::SumAgg;
 
 pub trait Aggregator {
