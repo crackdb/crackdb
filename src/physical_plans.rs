@@ -1,5 +1,6 @@
 mod hash_aggregator;
 mod projection;
+mod sort;
 
 use std::sync::{Arc, RwLock};
 
@@ -14,6 +15,7 @@ use crate::{
 
 pub use hash_aggregator::HashAggregator;
 pub use projection::Projection;
+pub use sort::Sort;
 
 pub trait PhysicalPlan {
     /// Setup this plan node, e.g. prepare some resources etc.

@@ -78,7 +78,7 @@ impl CrackDB {
         }
         let statement = Iterator::next(&mut statements.into_iter()).unwrap();
         // TODO: log the AST in debug level
-        // println!("AST: {:?}", statement);
+        // println!("AST: {statement:?}");
         // TODO: warn any present but unused nodes in AST
         // TODO: check and validate AST
         match statement {

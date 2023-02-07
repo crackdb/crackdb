@@ -1,15 +1,15 @@
 use std::sync::{Arc, RwLock};
 
 use sqlparser::ast::{
-    BinaryOperator, Expr, Function, FunctionArgExpr, SelectItem, SetExpr, Statement,
-    TableFactor, UnaryOperator, Value,
+    BinaryOperator, Expr, Function, FunctionArgExpr, OrderByExpr, SelectItem, SetExpr,
+    Statement, TableFactor, UnaryOperator, Value,
 };
 
 use crate::{
     expressions::{BinaryOp, Expression, Literal, UnaryOp},
-    logical_plans::LogicalPlan,
+    logical_plans::{LogicalPlan, SortOption},
     optimizer::Optimizer,
-    physical_plans::{Filter, InMemTableScan, PhysicalPlan},
+    physical_plans::{Filter, InMemTableScan, PhysicalPlan, Sort},
     physical_plans::{HashAggregator, Projection},
     Catalog, DBError, DBResult, ResultSet,
 };
@@ -93,12 +93,16 @@ impl SelectHandler {
                     child_plan,
                 )))
             }
+            LogicalPlan::Sort { options, child } => {
+                let child_plan = self.planning(*child)?;
+                Ok(Box::new(Sort::new(options, child_plan)))
+            }
         }
     }
 }
 
 fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
-    let logical_plan = match *query.body {
+    let mut logical_plan = match *query.body {
         SetExpr::Select(box_select) => {
             let select = *box_select;
 
@@ -163,6 +167,21 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
             ));
         }
     };
+
+    if !query.order_by.is_empty() {
+        let options = query
+            .order_by
+            .iter()
+            .map(|OrderByExpr { expr, asc, .. }| {
+                ast_expr_to_plan_expr(expr)
+                    .map(|expr| SortOption::new(expr, asc.unwrap_or(true)))
+            })
+            .collect::<DBResult<Vec<_>>>()?;
+        logical_plan = LogicalPlan::Sort {
+            options,
+            child: Box::new(logical_plan),
+        }
+    }
     Ok(logical_plan)
 }
 

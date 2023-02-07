@@ -34,7 +34,9 @@ pub fn support_aggregations() {
         ],
     );
     assert_eq!(
-        db.execute("select sum(amount), userId from orders group by userId"),
+        db.execute(
+            "select sum(amount), userId from orders group by userId order by userId"
+        ),
         Ok(expected_results)
     );
 }
@@ -68,7 +70,7 @@ pub fn support_aggregations_within_complex_expressions() {
     );
     assert_eq!(
         db.execute(
-            "select sum(amount) - 20.0 as amount, userId from orders group by userId"
+            "select sum(amount) - 20.0 as amount, userId from orders group by userId order by userId"
         ),
         Ok(expected_results)
     );
@@ -111,7 +113,7 @@ pub fn support_more_aggregators() {
         ],
     );
     assert_eq!(
-        db.execute("select avg(amount) as avg, max(amount) as max, min(amount) as min, count(*) as count, userId from orders group by userId"),
+        db.execute("select avg(amount) as avg, max(amount) as max, min(amount) as min, count(*) as count, userId from orders group by userId order by userId"),
         Ok(expected_results)
     );
 }

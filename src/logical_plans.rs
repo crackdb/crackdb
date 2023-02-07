@@ -27,6 +27,30 @@ pub enum LogicalPlan {
         groupings: Vec<Expression>,
         child: Box<LogicalPlan>,
     },
+    Sort {
+        options: Vec<SortOption>,
+        child: Box<LogicalPlan>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct SortOption {
+    expr: Expression,
+    asc: bool,
+}
+
+impl SortOption {
+    pub fn new(expr: Expression, asc: bool) -> Self {
+        Self { expr, asc }
+    }
+
+    pub fn asc(&self) -> bool {
+        self.asc
+    }
+
+    pub fn expr(&self) -> &Expression {
+        &self.expr
+    }
 }
 
 impl OptimizerNode for LogicalPlan {
@@ -60,6 +84,7 @@ impl LogicalPlan {
                 groupings,
                 ..
             } => Ok(aggregator_schema(groupings, aggregators)),
+            LogicalPlan::Sort { child, .. } => child.schema(),
         }
     }
 
@@ -106,6 +131,16 @@ impl LogicalPlan {
                     child: Box::new(updated_child),
                 },
             ),
+            LogicalPlan::Sort { options, child } => self
+                .transform_bottom_up_for_single_child_plan(
+                    child,
+                    context,
+                    func,
+                    |updated_child| LogicalPlan::Sort {
+                        options: options.clone(),
+                        child: Box::new(updated_child),
+                    },
+                ),
         }
     }
 
@@ -181,6 +216,26 @@ impl LogicalPlan {
                         LogicalPlan::Aggregator {
                             aggregators: expressions,
                             groupings: new_groupings,
+                            child: Box::new(child),
+                        }
+                    },
+                )
+            }
+            LogicalPlan::Sort { options, child } => {
+                let expressions = options.iter().map(|opt| opt.expr.clone()).collect();
+                self.transform_exprs_for_single_child_plan(
+                    &expressions,
+                    child,
+                    rule,
+                    context,
+                    |expressions, child| {
+                        let new_options = options
+                            .iter()
+                            .zip(expressions.into_iter())
+                            .map(|(opt, new_expr)| SortOption::new(new_expr, opt.asc()))
+                            .collect();
+                        LogicalPlan::Sort {
+                            options: new_options,
                             child: Box::new(child),
                         }
                     },

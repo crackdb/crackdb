@@ -1,5 +1,5 @@
-mod arithmetic;
-mod booleans;
+pub(crate) mod arithmetic;
+pub(crate) mod booleans;
 
 use crate::{
     expressions::{BinaryOp, Expression, Literal, UnaryOp},
