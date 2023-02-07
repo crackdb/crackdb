@@ -31,6 +31,17 @@ pub enum LogicalPlan {
         options: Vec<SortOption>,
         child: Box<LogicalPlan>,
     },
+    Limit {
+        offset: usize,
+        limit: LimitOption,
+        child: Box<LogicalPlan>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum LimitOption {
+    Num(usize),
+    All,
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +96,7 @@ impl LogicalPlan {
                 ..
             } => Ok(aggregator_schema(groupings, aggregators)),
             LogicalPlan::Sort { child, .. } => child.schema(),
+            LogicalPlan::Limit { child, .. } => child.schema(),
         }
     }
 
@@ -141,6 +153,20 @@ impl LogicalPlan {
                         child: Box::new(updated_child),
                     },
                 ),
+            LogicalPlan::Limit {
+                offset,
+                limit,
+                child,
+            } => self.transform_bottom_up_for_single_child_plan(
+                child,
+                context,
+                func,
+                |updated_child| LogicalPlan::Limit {
+                    offset: *offset,
+                    limit: limit.clone(),
+                    child: Box::new(updated_child),
+                },
+            ),
         }
     }
 
@@ -238,6 +264,24 @@ impl LogicalPlan {
                             options: new_options,
                             child: Box::new(child),
                         }
+                    },
+                )
+            }
+            LogicalPlan::Limit {
+                offset,
+                limit,
+                child,
+            } => {
+                let expressions = vec![];
+                self.transform_exprs_for_single_child_plan(
+                    &expressions,
+                    child,
+                    rule,
+                    context,
+                    |_expressions, child| LogicalPlan::Limit {
+                        offset: *offset,
+                        limit: limit.clone(),
+                        child: Box::new(child),
                     },
                 )
             }

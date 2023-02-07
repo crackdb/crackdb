@@ -1,4 +1,5 @@
 mod hash_aggregator;
+mod limit;
 mod projection;
 mod sort;
 
@@ -14,6 +15,7 @@ use crate::{
 };
 
 pub use hash_aggregator::HashAggregator;
+pub use limit::Limit;
 pub use projection::Projection;
 pub use sort::Sort;
 

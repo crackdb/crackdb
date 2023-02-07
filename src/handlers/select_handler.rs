@@ -7,9 +7,9 @@ use sqlparser::ast::{
 
 use crate::{
     expressions::{BinaryOp, Expression, Literal, UnaryOp},
-    logical_plans::{LogicalPlan, SortOption},
+    logical_plans::{LimitOption, LogicalPlan, SortOption},
     optimizer::Optimizer,
-    physical_plans::{Filter, InMemTableScan, PhysicalPlan, Sort},
+    physical_plans::{Filter, InMemTableScan, Limit, PhysicalPlan, Sort},
     physical_plans::{HashAggregator, Projection},
     Catalog, DBError, DBResult, ResultSet,
 };
@@ -97,6 +97,11 @@ impl SelectHandler {
                 let child_plan = self.planning(*child)?;
                 Ok(Box::new(Sort::new(options, child_plan)))
             }
+            LogicalPlan::Limit {
+                offset,
+                limit,
+                child,
+            } => Ok(Box::new(Limit::new(offset, limit, self.planning(*child)?))),
         }
     }
 }
@@ -182,6 +187,35 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
             child: Box::new(logical_plan),
         }
     }
+
+    if let Some(limit) = &query.limit {
+        let limit_option = match ast_expr_to_plan_expr(limit)? {
+            Expression::Literal(Literal::UnResolvedNumber(v)) => {
+                Ok(LimitOption::Num(v.parse::<usize>()?))
+            }
+            _ => Err(DBError::ParserError(format!(
+                "unrecognized limit option: {limit:?}"
+            ))),
+        }?;
+
+        let mut offset = 0;
+        if let Some(ast_offset) = &query.offset {
+            offset = match ast_expr_to_plan_expr(&ast_offset.value)? {
+                Expression::Literal(Literal::UnResolvedNumber(v)) => {
+                    Ok(v.parse::<usize>()?)
+                }
+                _ => Err(DBError::ParserError(format!(
+                    "unrecognized offset: {offset:?}"
+                ))),
+            }?;
+        }
+        logical_plan = LogicalPlan::Limit {
+            offset,
+            limit: limit_option,
+            child: Box::new(logical_plan),
+        };
+    }
+
     Ok(logical_plan)
 }
 
