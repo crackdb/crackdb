@@ -27,7 +27,7 @@ impl Rule<Expression> for ResolveExprRule {
         node: &Expression,
         context: &OptimizerContextForExpr,
     ) -> DBResult<Option<Expression>> {
-        node.transform_bottom_up(context, &mut Self::resolve_expression)
+        node.transform_top_down(context, &mut Self::resolve_expression)
     }
 }
 

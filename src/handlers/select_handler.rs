@@ -37,7 +37,7 @@ impl SelectHandler {
     fn process_query(&self, query: sqlparser::ast::Query) -> DBResult<ResultSet> {
         // generate logical plan
         let logical_plan = build_logical_plan(query)?;
-        // println!("logical plan: {:?}", logical_plan);
+        println!("logical plan: {logical_plan:?}");
 
         // TODO: optimize logical plan before further planning
         let optimizer = Optimizer::new(Arc::clone(&self.catalog));
@@ -102,6 +102,7 @@ impl SelectHandler {
                 limit,
                 child,
             } => Ok(Box::new(Limit::new(offset, limit, self.planning(*child)?))),
+            LogicalPlan::UnResolvedHaving { .. } => todo!(),
         }
     }
 }
@@ -163,6 +164,14 @@ fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
                     expressions: projection_exprs,
                     child: Box::new(plan),
                 }
+            }
+
+            // create Filter node for HAVING clause
+            if let Some(having) = select.having {
+                plan = LogicalPlan::UnResolvedHaving {
+                    prediction: ast_expr_to_plan_expr(&having)?,
+                    child: Box::new(plan),
+                };
             }
             plan
         }

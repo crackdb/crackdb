@@ -154,6 +154,28 @@ impl Expression {
         }
     }
 
+    /// id for the expression that can be used to check the semantic equality of two exprs,
+    /// e.g.: `SUM(X) as sum_x` is semantically equal to `SUM(X)`
+    pub fn sematic_id(&self) -> String {
+        match self {
+            Expression::Literal(l) => format!("literal_{}#{}", l, l.data_type()),
+            Expression::UnResolvedFieldRef(f) => format!("unresolved_ref_#{f}"),
+            Expression::FieldRef {
+                name,
+                index: _,
+                data_type,
+            } => format!("ref_{name}#{data_type}"),
+            Expression::Alias { alias: _, child } => child.sematic_id(),
+            Expression::BinaryOp { op, left, right } => {
+                format!("{}_{}_{}", left.sematic_id(), op, right.sematic_id())
+            }
+            Expression::UnaryOp { op, input } => format!("{op}_{}", input.sematic_id()),
+            Expression::UnResolvedFunction { name: _, args: _ } => self.to_string(),
+            Expression::Function(_) => self.to_string(),
+            Expression::Wildcard => self.to_string(),
+        }
+    }
+
     pub fn transform_bottom_up<T>(
         &self,
         context: &OptimizerContextForExpr,
@@ -245,6 +267,113 @@ impl Expression {
             }
         } else {
             func(self, context)
+        }
+    }
+
+    fn children(&self) -> Vec<&Expression> {
+        match self {
+            Expression::Literal(_) => vec![],
+            Expression::UnResolvedFieldRef(_) => vec![],
+            Expression::FieldRef {
+                name: _,
+                index: _,
+                data_type: _,
+            } => vec![],
+            Expression::Alias { alias: _, child } => vec![child],
+            Expression::BinaryOp { op: _, left, right } => vec![left, right],
+            Expression::UnaryOp { op: _, input } => vec![input],
+            Expression::UnResolvedFunction { name: _, args } => args.iter().collect(),
+            Expression::Function(f) => f.args(),
+            Expression::Wildcard => vec![],
+        }
+    }
+
+    fn clone_with_children(&self, children: Vec<Expression>) -> DBResult<Expression> {
+        match self {
+            Expression::Literal(_) => Err(DBError::should_never_happen()),
+            Expression::UnResolvedFieldRef(_) => Err(DBError::should_never_happen()),
+            Expression::FieldRef {
+                name: _,
+                index: _,
+                data_type: _,
+            } => Err(DBError::should_never_happen()),
+            Expression::Alias { alias, child: _ } => Ok(Expression::Alias {
+                alias: alias.clone(),
+                child: Box::new(children.into_iter().next().unwrap()),
+            }),
+            Expression::BinaryOp {
+                op,
+                left: _,
+                right: _,
+            } => {
+                let mut iter = children.into_iter();
+                Ok(Expression::BinaryOp {
+                    op: op.clone(),
+                    left: Box::new(iter.next().unwrap()),
+                    right: Box::new(iter.next().unwrap()),
+                })
+            }
+            Expression::UnaryOp { op, input: _ } => Ok(Expression::UnaryOp {
+                op: op.clone(),
+                input: Box::new(children.into_iter().next().unwrap()),
+            }),
+            Expression::UnResolvedFunction { name, args: _ } => {
+                Ok(Expression::UnResolvedFunction {
+                    name: name.clone(),
+                    args: children,
+                })
+            }
+            Expression::Function(f) => {
+                let updated_f = f.with_args(children)?;
+                Ok(Expression::Function(updated_f))
+            }
+            Expression::Wildcard => Ok(Expression::Wildcard),
+        }
+    }
+
+    pub fn transform_top_down<T>(
+        &self,
+        context: &OptimizerContextForExpr,
+        func: &mut T,
+    ) -> DBResult<Option<Expression>>
+    where
+        T: FnMut(&Expression, &OptimizerContextForExpr) -> DBResult<Option<Expression>>,
+    {
+        match func(self, context)? {
+            Some(updated) => {
+                let maybe_updated_children = updated
+                    .children()
+                    .iter()
+                    .map(|child| child.transform_top_down(context, func))
+                    .collect::<DBResult<Option<Vec<_>>>>()?;
+                match maybe_updated_children {
+                    Some(updated_children) if !updated_children.is_empty() => {
+                        updated.clone_with_children(updated_children).map(Some)
+                    }
+                    _ => Ok(Some(updated)),
+                }
+            }
+            None => {
+                let children = self.children();
+                if !children.is_empty() {
+                    let mut child_updated = false;
+                    let mut maybe_updated_children = Vec::with_capacity(children.len());
+                    for child in children {
+                        if let Some(updated) = child.transform_top_down(context, func)? {
+                            child_updated = true;
+                            maybe_updated_children.push(updated);
+                        } else {
+                            maybe_updated_children.push(child.clone());
+                        }
+                    }
+                    if child_updated {
+                        return Ok(Some(
+                            self.clone_with_children(maybe_updated_children)?,
+                        ));
+                    }
+                }
+                Ok(None)
+            }
         }
     }
 }

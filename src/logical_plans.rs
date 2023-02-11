@@ -36,6 +36,10 @@ pub enum LogicalPlan {
         limit: LimitOption,
         child: Box<LogicalPlan>,
     },
+    UnResolvedHaving {
+        prediction: Expression,
+        child: Box<LogicalPlan>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +101,7 @@ impl LogicalPlan {
             } => Ok(aggregator_schema(groupings, aggregators)),
             LogicalPlan::Sort { child, .. } => child.schema(),
             LogicalPlan::Limit { child, .. } => child.schema(),
+            LogicalPlan::UnResolvedHaving { child, .. } => child.schema(),
         }
     }
 
@@ -167,6 +172,16 @@ impl LogicalPlan {
                     child: Box::new(updated_child),
                 },
             ),
+            LogicalPlan::UnResolvedHaving { prediction, child } => self
+                .transform_bottom_up_for_single_child_plan(
+                    child,
+                    context,
+                    func,
+                    |updated_child| LogicalPlan::UnResolvedHaving {
+                        prediction: prediction.clone(),
+                        child: Box::new(updated_child),
+                    },
+                ),
         }
     }
 
@@ -281,6 +296,20 @@ impl LogicalPlan {
                     |_expressions, child| LogicalPlan::Limit {
                         offset: *offset,
                         limit: limit.clone(),
+                        child: Box::new(child),
+                    },
+                )
+            }
+            LogicalPlan::UnResolvedHaving { prediction, child } => {
+                // TODO: avoid clone
+                let expressions = vec![prediction.clone()];
+                self.transform_exprs_for_single_child_plan(
+                    &expressions,
+                    child,
+                    rule,
+                    context,
+                    |expressions, child| LogicalPlan::UnResolvedHaving {
+                        prediction: expressions.into_iter().next().unwrap(),
                         child: Box::new(child),
                     },
                 )

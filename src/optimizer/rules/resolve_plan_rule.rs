@@ -4,6 +4,7 @@ use crate::{logical_plans::LogicalPlan, optimizer::OptimizerContext, DBError, DB
 
 use super::Rule;
 
+/// Resolve UnResolvedScan node.
 pub struct ResolvePlanRule {}
 
 impl Rule<LogicalPlan> for ResolvePlanRule {

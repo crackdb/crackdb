@@ -29,3 +29,9 @@ impl From<ParseIntError> for DBError {
         DBError::ParserError(format!("cannot parse int number: {e}"))
     }
 }
+
+impl DBError {
+    pub fn should_never_happen() -> DBError {
+        DBError::Unknown("should never happen".to_owned())
+    }
+}
