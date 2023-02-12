@@ -6,6 +6,7 @@ mod functions;
 pub mod handlers;
 pub mod interpreter;
 pub mod logical_plans;
+mod parser;
 pub mod physical_plans;
 pub mod tables;
 use catalog::Catalog;
