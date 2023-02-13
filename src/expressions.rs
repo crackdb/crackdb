@@ -1,3 +1,5 @@
+use core::slice;
+use std::borrow::Borrow;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::rc::Rc;
@@ -189,7 +191,7 @@ impl Expression {
             Expression::UnResolvedFieldRef(_) => func(self, context),
             Expression::FieldRef { .. } => func(self, context),
             Expression::BinaryOp { op, left, right } => {
-                let children = vec![left.as_ref().clone(), right.as_ref().clone()];
+                let children = vec![left.as_ref(), right.as_ref()];
                 self.transform_bottom_up_helper(&children, context, func, |children| {
                     let mut iter = children.into_iter();
                     Ok(Expression::BinaryOp {
@@ -200,7 +202,7 @@ impl Expression {
                 })
             }
             Expression::UnaryOp { op, input } => {
-                let children = vec![input.as_ref().clone()];
+                let children = slice::from_ref(input);
                 self.transform_bottom_up_helper(&children, context, func, |children| {
                     let mut iter = children.into_iter();
                     Ok(Expression::UnaryOp {
@@ -210,7 +212,7 @@ impl Expression {
                 })
             }
             Expression::Alias { alias, child } => {
-                let children = vec![child.as_ref().clone()];
+                let children = slice::from_ref(child.as_ref());
                 self.transform_bottom_up_helper(&children, context, func, |children| {
                     let mut iter = children.into_iter();
                     Ok(Expression::Alias {
@@ -227,8 +229,7 @@ impl Expression {
                     })
                 }),
             Expression::Function(f) => {
-                // TODO: get rid of this clone
-                let args = f.args().into_iter().cloned().collect();
+                let args = f.args();
                 self.transform_bottom_up_helper(&args, context, func, |args| {
                     f.with_args(args).map(Expression::Function)
                 })
@@ -239,7 +240,7 @@ impl Expression {
 
     fn transform_bottom_up_helper<T, B>(
         &self,
-        children: &Vec<Expression>,
+        children: &[impl Borrow<Expression>],
         context: &OptimizerContextForExpr,
         func: &mut T,
         builder: B,
@@ -251,11 +252,11 @@ impl Expression {
         let mut any_children_updated = false;
         let mut updated_children = Vec::new();
         for child in children {
-            if let Some(updated) = child.transform_bottom_up(context, func)? {
+            if let Some(updated) = child.borrow().transform_bottom_up(context, func)? {
                 any_children_updated = true;
                 updated_children.push(updated);
             } else {
-                updated_children.push(child.clone());
+                updated_children.push(child.borrow().clone());
             }
         }
 

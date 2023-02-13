@@ -1,3 +1,6 @@
+use std::borrow::Borrow;
+use std::slice;
+
 use crate::aggregators::aggregator_schema;
 use crate::expressions::Expression;
 use crate::optimizer::rules::Rule;
@@ -214,7 +217,7 @@ impl LogicalPlan {
             LogicalPlan::UnResolvedScan { .. } => Ok(None),
             LogicalPlan::Scan { .. } => Ok(None),
             LogicalPlan::Filter { expression, child } => {
-                let expressions = vec![expression.clone()];
+                let expressions = slice::from_ref(expression);
                 self.transform_exprs_for_single_child_plan(
                     &expressions,
                     child,
@@ -245,8 +248,7 @@ impl LogicalPlan {
                 let expressions = aggregators
                     .iter()
                     .chain(groupings.iter())
-                    .cloned()
-                    .collect();
+                    .collect::<Vec<_>>();
                 self.transform_exprs_for_single_child_plan(
                     &expressions,
                     child,
@@ -263,7 +265,7 @@ impl LogicalPlan {
                 )
             }
             LogicalPlan::Sort { options, child } => {
-                let expressions = options.iter().map(|opt| opt.expr.clone()).collect();
+                let expressions = options.iter().map(|opt| &opt.expr).collect::<Vec<_>>();
                 self.transform_exprs_for_single_child_plan(
                     &expressions,
                     child,
@@ -287,7 +289,7 @@ impl LogicalPlan {
                 limit,
                 child,
             } => {
-                let expressions = vec![];
+                let expressions: Vec<Expression> = vec![];
                 self.transform_exprs_for_single_child_plan(
                     &expressions,
                     child,
@@ -301,8 +303,7 @@ impl LogicalPlan {
                 )
             }
             LogicalPlan::UnResolvedHaving { prediction, child } => {
-                // TODO: avoid clone
-                let expressions = vec![prediction.clone()];
+                let expressions = slice::from_ref(prediction);
                 self.transform_exprs_for_single_child_plan(
                     &expressions,
                     child,
@@ -319,7 +320,7 @@ impl LogicalPlan {
 
     fn transform_exprs_for_single_child_plan(
         &self,
-        expressions: &Vec<Expression>,
+        expressions: &[impl Borrow<Expression>],
         child: &LogicalPlan,
         rule: &dyn Rule<Expression>,
         context: &OptimizerContext,
@@ -334,11 +335,11 @@ impl LogicalPlan {
         let mut any_expr_transformed = false;
         let mut new_exprs = Vec::new();
         for expr in expressions {
-            if let Some(transformed) = rule.apply(expr, &context_for_expr)? {
+            if let Some(transformed) = rule.apply(expr.borrow(), &context_for_expr)? {
                 any_expr_transformed = true;
                 new_exprs.push(transformed);
             } else {
-                new_exprs.push(expr.clone());
+                new_exprs.push(expr.borrow().clone());
             }
         }
         match (new_child, any_expr_transformed) {
