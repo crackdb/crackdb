@@ -1,40 +1,17 @@
+pub mod inmem;
+
 use crate::data_types::DataType;
+use crate::physical_plans::PhysicalPlan;
 use crate::row::Row;
 
-pub struct InMemTable {
-    meta: TableMeta,
-    data: Vec<Row<'static>>,
-}
+pub trait Table {
+    fn insert_data(&mut self, data: Vec<Row<'static>>);
 
-impl InMemTable {
-    pub fn new(meta: TableMeta) -> Self {
-        InMemTable {
-            meta,
-            data: Vec::new(),
-        }
-    }
+    fn read(&self) -> Box<dyn Iterator<Item = Row<'static>>>;
 
-    pub fn insert_data(&mut self, data: Vec<Row<'static>>) {
-        self.data.extend(data)
-    }
+    fn get_table_meta(&self) -> TableMeta;
 
-    // FIXME: avoid copy data for reading purpose
-    pub fn read(&self) -> Vec<Row<'static>> {
-        self.data.to_vec()
-    }
-
-    pub fn headers(&self) -> Vec<String> {
-        self.meta
-            .schema
-            .fields
-            .iter()
-            .map(|f| f.name.to_string())
-            .collect()
-    }
-
-    pub fn get_table_meta(&self) -> TableMeta {
-        self.meta.clone()
-    }
+    fn create_scan_op(&self) -> Box<dyn PhysicalPlan>;
 }
 
 #[derive(Debug, Clone)]

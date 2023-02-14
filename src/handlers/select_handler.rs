@@ -6,7 +6,7 @@ use crate::{
     logical_plans::LogicalPlan,
     optimizer::Optimizer,
     parser::build_logical_plan,
-    physical_plans::{Filter, InMemTableScan, Limit, PhysicalPlan, Sort},
+    physical_plans::{Filter, Limit, PhysicalPlan, Sort},
     physical_plans::{HashAggregator, Projection},
     Catalog, DBError, DBResult, ResultSet,
 };
@@ -63,14 +63,18 @@ impl SelectHandler {
                 let child_plan = self.planning(*child)?;
                 Ok(Box::new(Filter::new(expression, child_plan)))
             }
-            LogicalPlan::Scan { table, .. } => RwLock::read(&self.catalog)
-                .map_err(|_e| {
-                    DBError::Unknown("access catalog read lock failed".to_string())
-                })?
-                .try_get_table(&table)
-                .map(|table| {
-                    Box::new(InMemTableScan::new(table)) as Box<dyn PhysicalPlan>
-                }),
+            LogicalPlan::Scan { table, .. } => {
+                let table = RwLock::read(&self.catalog)
+                    .map_err(|_e| {
+                        DBError::Unknown("access catalog read lock failed".to_string())
+                    })?
+                    .try_get_table(&table)?;
+                let table = RwLock::read(&table).map_err(|_e| {
+                    DBError::Unknown("access table read lock failed".to_string())
+                })?;
+
+                Ok(table.as_ref().create_scan_op())
+            }
             LogicalPlan::UnResolvedScan { table: _ } => {
                 Err(DBError::Unknown("Scan is not resolved.".to_string()))
             }

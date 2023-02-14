@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use crate::{
     functions::FunctionsRegistry,
     logical_plans::LogicalPlan,
-    tables::{InMemTable, RelationSchema},
+    tables::{RelationSchema, Table},
     Catalog, DBError, DBResult,
 };
 
@@ -27,12 +27,12 @@ pub struct OptimizerContext {
 }
 
 impl OptimizerContext {
-    fn try_get_table(&self, table_name: &str) -> DBResult<Arc<RwLock<InMemTable>>> {
-        let db = self
+    fn try_get_table(&self, table_name: &str) -> DBResult<Arc<RwLock<Box<dyn Table>>>> {
+        let catalog = self
             .catalog
             .read()
             .map_err(|_e| DBError::Unknown("Access db read lock failed.".to_string()))?;
-        db.try_get_table(table_name)
+        catalog.try_get_table(table_name)
     }
 }
 
