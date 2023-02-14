@@ -9,6 +9,21 @@ use crate::{
     DBError, DBResult,
 };
 
+fn remove_quotes(value: String) -> String {
+    if is_quoted_str(value.as_str()) {
+        let bytes = &value.as_bytes()[1..value.len() - 1];
+        String::from_utf8_lossy(bytes).to_string()
+    } else {
+        value
+    }
+}
+
+fn is_quoted_str(value: &str) -> bool {
+    value.len() > 1
+        && (value.starts_with('\'') && value.ends_with('\'')
+            || value.starts_with('"') && value.ends_with('"'))
+}
+
 pub(crate) fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<LogicalPlan> {
     let mut logical_plan = match *query.body {
         SetExpr::Select(box_select) => {
@@ -24,7 +39,7 @@ pub(crate) fn build_logical_plan(query: sqlparser::ast::Query) -> DBResult<Logic
                     args: _,
                     with_hints: _,
                 } => LogicalPlan::UnResolvedScan {
-                    table: name.to_string(),
+                    table: remove_quotes(name.to_string()),
                 },
                 _ => todo!(),
             };

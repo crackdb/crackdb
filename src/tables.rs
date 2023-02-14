@@ -1,3 +1,4 @@
+pub mod csv;
 pub mod inmem;
 
 use crate::data_types::DataType;
@@ -6,8 +7,6 @@ use crate::row::Row;
 
 pub trait Table {
     fn insert_data(&mut self, data: Vec<Row<'static>>);
-
-    fn read(&self) -> Box<dyn Iterator<Item = Row<'static>>>;
 
     fn get_table_meta(&self) -> TableMeta;
 
@@ -40,6 +39,10 @@ impl RelationSchema {
 
     pub fn get_fields(&self) -> &Vec<FieldInfo> {
         &self.fields
+    }
+
+    pub fn num_fields(&self) -> usize {
+        self.fields.len()
     }
 
     pub fn get_field_at(&self, idx: usize) -> Option<&FieldInfo> {

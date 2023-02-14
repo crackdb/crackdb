@@ -24,10 +24,6 @@ impl Table for InMemTable {
         self.data.extend(data)
     }
 
-    fn read(&self) -> Box<dyn Iterator<Item = Row<'static>>> {
-        Box::new(self.data.to_vec().into_iter())
-    }
-
     fn get_table_meta(&self) -> TableMeta {
         self.meta.clone()
     }

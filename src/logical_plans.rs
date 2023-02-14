@@ -219,7 +219,7 @@ impl LogicalPlan {
             LogicalPlan::Filter { expression, child } => {
                 let expressions = slice::from_ref(expression);
                 self.transform_exprs_for_single_child_plan(
-                    &expressions,
+                    expressions,
                     child,
                     rule,
                     context,
@@ -305,7 +305,7 @@ impl LogicalPlan {
             LogicalPlan::UnResolvedHaving { prediction, child } => {
                 let expressions = slice::from_ref(prediction);
                 self.transform_exprs_for_single_child_plan(
-                    &expressions,
+                    expressions,
                     child,
                     rule,
                     context,

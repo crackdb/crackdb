@@ -203,7 +203,7 @@ impl Expression {
             }
             Expression::UnaryOp { op, input } => {
                 let children = slice::from_ref(input);
-                self.transform_bottom_up_helper(&children, context, func, |children| {
+                self.transform_bottom_up_helper(children, context, func, |children| {
                     let mut iter = children.into_iter();
                     Ok(Expression::UnaryOp {
                         op: op.clone(),
@@ -213,7 +213,7 @@ impl Expression {
             }
             Expression::Alias { alias, child } => {
                 let children = slice::from_ref(child.as_ref());
-                self.transform_bottom_up_helper(&children, context, func, |children| {
+                self.transform_bottom_up_helper(children, context, func, |children| {
                     let mut iter = children.into_iter();
                     Ok(Expression::Alias {
                         alias: alias.clone(),

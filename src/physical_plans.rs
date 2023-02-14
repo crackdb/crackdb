@@ -1,3 +1,4 @@
+mod csv_scan;
 mod filter;
 mod hash_aggregator;
 mod inmem_scan;
@@ -7,6 +8,7 @@ mod sort;
 
 use crate::{errors::DBResult, row::Row, tables::RelationSchema};
 
+pub use csv_scan::CsvScan;
 pub use filter::Filter;
 pub use hash_aggregator::HashAggregator;
 pub use inmem_scan::InMemTableScan;

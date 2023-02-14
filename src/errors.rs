@@ -8,6 +8,7 @@ pub enum DBError {
     TableNotFound(String),
     InterpretingError(String),
     Unknown(String),
+    StorageEngine(String),
 }
 
 pub type DBResult<T> = Result<T, DBError>;
