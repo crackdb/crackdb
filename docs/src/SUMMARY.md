@@ -1,3 +1,5 @@
 # Summary
 
-- [Chapter 1](./chapter_1.md)
+- [Data Types](./guides/data_types.md)
+- [Select Queries](./guides/select_queries.md)
+- [Data Formats](./guides/data_formats.md)
