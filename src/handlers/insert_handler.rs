@@ -158,6 +158,7 @@ fn convert_insert_expr_to_cell_value(
             }
             Value::DoubleQuotedString(v) => match data_type {
                 DataType::String => Ok(Literal::String(v.to_string())),
+                DataType::DateTime => Ok(Literal::DateTime(v.to_string())),
                 _ => Err(DBError::ParserError("Unexpected string.".to_string())),
             },
             Value::Boolean(v) => match data_type {
@@ -168,7 +169,7 @@ fn convert_insert_expr_to_cell_value(
             Value::Placeholder(_) => {
                 Err(DBError::ParserError("Unexpected placeholder".to_string()))
             }
-            Value::UnQuotedString(_) => Err(DBError::ParserError(
+            _ => Err(DBError::ParserError(
                 "Unexpected unquoted string.".to_string(),
             )),
         },

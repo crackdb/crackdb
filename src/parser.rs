@@ -200,6 +200,7 @@ pub(crate) fn ast_binary_op_to_plan_binary_op(op: &BinaryOperator) -> DBResult<B
         BinaryOperator::PGRegexNotMatch => todo!(),
         BinaryOperator::PGRegexNotIMatch => todo!(),
         BinaryOperator::PGCustomBinaryOperator(_) => todo!(),
+        _ => todo!(),
     }
 }
 
@@ -238,76 +239,13 @@ pub(crate) fn ast_expr_to_plan_expr(expr: &Expr) -> DBResult<Expression> {
             let literal = match v {
                 Value::Number(v, _) => Literal::UnResolvedNumber(v.to_string()),
                 Value::SingleQuotedString(v) => Literal::UnResolvedString(v.to_string()),
-                Value::DollarQuotedString(_) => todo!(),
-                Value::EscapedStringLiteral(_) => todo!(),
-                Value::NationalStringLiteral(_) => todo!(),
-                Value::HexStringLiteral(_) => todo!(),
                 Value::DoubleQuotedString(v) => Literal::UnResolvedString(v.to_string()),
                 Value::Boolean(v) => Literal::Bool(*v),
                 Value::Null => Literal::Null,
-                Value::Placeholder(_) => todo!(),
-                Value::UnQuotedString(_) => todo!(),
+                _ => todo!(),
             };
             Ok(Expression::Literal(literal))
         }
-        Expr::CompoundIdentifier(_) => todo!(),
-        Expr::JsonAccess {
-            left: _,
-            operator: _,
-            right: _,
-        } => todo!(),
-        Expr::CompositeAccess { expr: _, key: _ } => todo!(),
-        Expr::IsFalse(_) => todo!(),
-        Expr::IsNotFalse(_) => todo!(),
-        Expr::IsTrue(_) => todo!(),
-        Expr::IsNotTrue(_) => todo!(),
-        Expr::IsNull(_) => todo!(),
-        Expr::IsNotNull(_) => todo!(),
-        Expr::IsUnknown(_) => todo!(),
-        Expr::IsNotUnknown(_) => todo!(),
-        Expr::IsDistinctFrom(_, _) => todo!(),
-        Expr::IsNotDistinctFrom(_, _) => todo!(),
-        Expr::InList {
-            expr: _,
-            list: _,
-            negated: _,
-        } => todo!(),
-        Expr::InSubquery {
-            expr: _,
-            subquery: _,
-            negated: _,
-        } => todo!(),
-        Expr::InUnnest {
-            expr: _,
-            array_expr: _,
-            negated: _,
-        } => todo!(),
-        Expr::Between {
-            expr: _,
-            negated: _,
-            low: _,
-            high: _,
-        } => todo!(),
-        Expr::Like {
-            negated: _,
-            expr: _,
-            pattern: _,
-            escape_char: _,
-        } => todo!(),
-        Expr::ILike {
-            negated: _,
-            expr: _,
-            pattern: _,
-            escape_char: _,
-        } => todo!(),
-        Expr::SimilarTo {
-            negated: _,
-            expr: _,
-            pattern: _,
-            escape_char: _,
-        } => todo!(),
-        Expr::AnyOp(_) => todo!(),
-        Expr::AllOp(_) => todo!(),
         Expr::UnaryOp { op, expr } => {
             let (op, expr) = (
                 ast_unary_op_to_plan_unary_op(op)?,
@@ -318,52 +256,6 @@ pub(crate) fn ast_expr_to_plan_expr(expr: &Expr) -> DBResult<Expression> {
                 input: Box::new(expr),
             })
         }
-        Expr::Cast {
-            expr: _,
-            data_type: _,
-        } => todo!(),
-        Expr::TryCast {
-            expr: _,
-            data_type: _,
-        } => todo!(),
-        Expr::SafeCast {
-            expr: _,
-            data_type: _,
-        } => todo!(),
-        Expr::AtTimeZone {
-            timestamp: _,
-            time_zone: _,
-        } => todo!(),
-        Expr::Extract { field: _, expr: _ } => todo!(),
-        Expr::Ceil { expr: _, field: _ } => todo!(),
-        Expr::Floor { expr: _, field: _ } => todo!(),
-        Expr::Position { expr: _, r#in: _ } => todo!(),
-        Expr::Substring {
-            expr: _,
-            substring_from: _,
-            substring_for: _,
-        } => todo!(),
-        Expr::Trim {
-            expr: _,
-            trim_where: _,
-            trim_what: _,
-        } => todo!(),
-        Expr::Overlay {
-            expr: _,
-            overlay_what: _,
-            overlay_from: _,
-            overlay_for: _,
-        } => todo!(),
-        Expr::Collate {
-            expr: _,
-            collation: _,
-        } => todo!(),
-        Expr::Nested(_) => todo!(),
-        Expr::TypedString {
-            data_type: _,
-            value: _,
-        } => todo!(),
-        Expr::MapAccess { column: _, keys: _ } => todo!(),
         Expr::Function(Function { name, args, .. }) => {
             let arg_exprs = args
                 .iter()
@@ -381,39 +273,7 @@ pub(crate) fn ast_expr_to_plan_expr(expr: &Expr) -> DBResult<Expression> {
                 args: arg_exprs,
             })
         }
-        Expr::AggregateExpressionWithFilter { expr: _, filter: _ } => todo!(),
-        Expr::Case {
-            operand: _,
-            conditions: _,
-            results: _,
-            else_result: _,
-        } => todo!(),
-        Expr::Exists {
-            subquery: _,
-            negated: _,
-        } => todo!(),
-        Expr::Subquery(_) => todo!(),
-        Expr::ArraySubquery(_) => todo!(),
-        Expr::ListAgg(_) => todo!(),
-        Expr::ArrayAgg(_) => todo!(),
-        Expr::GroupingSets(_) => todo!(),
-        Expr::Cube(_) => todo!(),
-        Expr::Rollup(_) => todo!(),
-        Expr::Tuple(_) => todo!(),
-        Expr::ArrayIndex { obj: _, indexes: _ } => todo!(),
-        Expr::Array(_) => todo!(),
-        Expr::Interval {
-            value: _,
-            leading_field: _,
-            leading_precision: _,
-            last_field: _,
-            fractional_seconds_precision: _,
-        } => todo!(),
-        Expr::MatchAgainst {
-            columns: _,
-            match_value: _,
-            opt_search_modifier: _,
-        } => todo!(),
+        _ => todo!(),
     }
 }
 

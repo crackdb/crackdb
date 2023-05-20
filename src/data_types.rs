@@ -142,7 +142,7 @@ impl From<sqlparser::ast::DataType> for DataType {
             sqlparser::ast::DataType::Custom(_, _) => DataType::Unknown,
             sqlparser::ast::DataType::Array(_) => DataType::Unknown,
             sqlparser::ast::DataType::Enum(_) => DataType::Unknown,
-            sqlparser::ast::DataType::Set(_) => DataType::Unknown,
+            _ => DataType::Unknown,
         }
     }
 }

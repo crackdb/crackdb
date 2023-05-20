@@ -44,6 +44,7 @@ impl QueryHandler for CreateTableHandler {
                 collation: _,
                 on_commit: _,
                 on_cluster: _,
+                ..
             } => {
                 self.create_table(name, columns)?;
                 Ok(ResultSet::empty())
