@@ -13,4 +13,4 @@ name = "crackdb"
 
 [dependencies]
 csv-core = "0.1.10"
-sqlparser = { version = "0.33.0", features = ["serde", "visitor"]}
+sqlparser = { version = "0.34.0", features = ["serde", "visitor"]}
