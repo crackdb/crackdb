@@ -16,7 +16,7 @@ jobs:
     container:
       image: amd64/rust
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup toolchain
         run: |
           rustup toolchain install stable
@@ -35,7 +35,7 @@ jobs:
         # "1" means line tables only, which is useful for panic tracebacks.
         RUSTFLAGS: "-C debuginfo=1"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Cache Cargo
         uses: actions/cache@v3
         with:
@@ -62,7 +62,7 @@ jobs:
       env:
         RUSTFLAGS: "-C debuginfo=1"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - name: Cache Cargo
@@ -89,7 +89,7 @@ jobs:
       env:
         RUSTFLAGS: "-C debuginfo=1"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - name: Cache Cargo
