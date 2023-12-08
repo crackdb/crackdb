@@ -35,6 +35,7 @@ impl MaxAgg {
         })
     }
 }
+
 impl Aggregator for MaxAgg {
     fn initial_row(&self) -> DBResult<Row<'static>> {
         // TODO: consider self.agg_buffer.buffer_schema.row(literals) to get the row

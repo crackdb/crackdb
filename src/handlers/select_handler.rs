@@ -34,13 +34,13 @@ impl SelectHandler {
     fn process_query(&self, query: sqlparser::ast::Query) -> DBResult<ResultSet> {
         // generate logical plan
         let logical_plan = build_logical_plan(query)?;
-        println!("logical plan: {logical_plan:?}");
+        log::debug!("logical plan: {logical_plan:?}");
 
         // TODO: optimize logical plan before further planning
         let optimizer = Optimizer::new(Arc::clone(&self.catalog));
         let optimized_logical_plan = optimizer.optimize(logical_plan)?;
 
-        println!("optimized logical plan: {optimized_logical_plan:?}");
+        log::debug!("optimized logical plan: {optimized_logical_plan:?}");
 
         // transform to physical plan by planning it
         let mut physical_plan = self.planning(optimized_logical_plan)?;

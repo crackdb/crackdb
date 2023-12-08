@@ -16,3 +16,5 @@ csv-core = "0.1.10"
 sqlparser = { version = "0.34.0", features = ["serde", "visitor"]}
 serde = "1.0"
 serde_json = "1.0"
+log = "0.4"
+env_logger = "0"
