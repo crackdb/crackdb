@@ -11,7 +11,12 @@ pub mod physical_plans;
 pub mod tables;
 use catalog::Catalog;
 pub use errors::*;
+use expressions::Literal;
 use handlers::{CreateTableHandler, InsertHandler, QueryHandler, SelectHandler};
+use serde::{
+    ser::{SerializeMap, SerializeSeq},
+    Serialize,
+};
 use tables::RelationSchema;
 
 pub mod data_types;
@@ -52,6 +57,44 @@ impl ResultSet {
     }
     pub fn new(schema: RelationSchema, rows: Vec<Row<'static>>) -> Self {
         ResultSet { schema, rows }
+    }
+}
+
+pub struct RowWithSchema<'a> {
+    pub row: &'a Row<'static>,
+    pub schema: &'a RelationSchema,
+}
+
+impl<'a> RowWithSchema<'a> {
+    pub fn new(schema: &'a RelationSchema, row: &'a Row<'static>) -> Self {
+        Self { row, schema }
+    }
+}
+
+impl Serialize for ResultSet {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(self.rows.len()))?;
+        for r in self.rows.iter() {
+            seq.serialize_element(&RowWithSchema::new(&self.schema, r))?;
+        }
+        seq.end()
+    }
+}
+
+impl<'a> Serialize for RowWithSchema<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.schema.num_fields()))?;
+        for (idx, field) in self.schema.get_fields().iter().enumerate() {
+            let value = self.row.get_field(idx).unwrap_or(Literal::Null);
+            map.serialize_entry(field.name(), &value)?;
+        }
+        map.end()
     }
 }
 

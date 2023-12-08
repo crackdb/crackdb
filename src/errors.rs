@@ -1,4 +1,4 @@
-use std::num::{ParseFloatError, ParseIntError};
+use std::{num::{ParseFloatError, ParseIntError}, fmt::Display};
 
 use sqlparser::parser::ParserError;
 
@@ -9,6 +9,21 @@ pub enum DBError {
     InterpretingError(String),
     Unknown(String),
     StorageEngine(String),
+}
+
+impl Display for DBError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DBError::ParserError(msg) => write!(f, "ParserError: {}", msg),
+            DBError::TableNotFound(msg) => write!(f, "TableNoteFound: {}", msg),
+            DBError::InterpretingError(msg) => write!(f, "InterpretingError: {}", msg),
+            DBError::Unknown(msg) => write!(f, "Unknown: {}", msg),
+            DBError::StorageEngine(msg) => write!(f, "StorageEngineError: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for DBError {
 }
 
 pub type DBResult<T> = Result<T, DBError>;

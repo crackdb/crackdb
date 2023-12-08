@@ -4,6 +4,8 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::rc::Rc;
 
+use serde::Serialize;
+
 use crate::data_types::DataType;
 use crate::functions::Function;
 use crate::optimizer::{OptimizerContextForExpr, OptimizerNode};
@@ -397,6 +399,32 @@ pub enum Literal {
     String(String),
     DateTime(String),
     Null,
+}
+
+impl Serialize for Literal {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Literal::UnResolvedNumber(_) => todo!(),
+            Literal::UnResolvedString(_) => todo!(),
+            Literal::UInt8(v) => serializer.serialize_u8(*v),
+            Literal::UInt16(v) => serializer.serialize_u16(*v),
+            Literal::UInt32(v) => serializer.serialize_u32(*v),
+            Literal::UInt64(v) => serializer.serialize_u64(*v),
+            Literal::Int8(v) => serializer.serialize_i8(*v),
+            Literal::Int16(v) => serializer.serialize_i16(*v),
+            Literal::Int32(v) => serializer.serialize_i32(*v),
+            Literal::Int64(v) => serializer.serialize_i64(*v),
+            Literal::Float32(v) => serializer.serialize_f32(*v),
+            Literal::Float64(v) => serializer.serialize_f64(*v),
+            Literal::Bool(v) => serializer.serialize_bool(*v),
+            Literal::String(v) => serializer.serialize_str(v.as_str()),
+            Literal::DateTime(_) => todo!(),
+            Literal::Null => serializer.serialize_none(),
+        }
+    }
 }
 
 impl PartialEq for Literal {
